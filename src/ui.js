@@ -24,8 +24,8 @@ export function createUI({ client, audio, onViewChange = () => {} }) {
   $('#join-screen').insertAdjacentHTML('afterbegin','<a class="landing-credits" href="/credits.html">Credits</a>');
   $('.hero-title').insertAdjacentHTML('afterend','<div id="xp-progress" role="progressbar" aria-label="Progress to next level" aria-valuemin="0" aria-valuemax="100"><i id="xp-bar"></i></div>');
   $('#help-dialog .dialog-actions').insertAdjacentHTML('beforebegin','<fieldset class="audio-settings"><legend>Sound</legend><label>Ambience<input id="ambience-volume" type="range" min="0" max="100" value="45"></label><label>Sound effects<input id="sfx-volume" type="range" min="0" max="100" value="65"></label><small id="audio-status" role="status"></small></fieldset>');
-  const updateAudio=()=>{const state=audio.getStats();$('#sound').setAttribute('aria-pressed',String(state.enabled));$('#sound').setAttribute('aria-label',state.enabled?'Mute sound':'Enable sound');$('#sound').classList.toggle('active',state.enabled);$('#sound').disabled=state.busy;$('#audio-status').textContent=state.error||'';};
-  listen($('#sound'),'click',()=>void audio.toggle());
+  const updateAudio=()=>{const state=audio.getStats();$('#sound').setAttribute('aria-pressed',String(state.enabled));$('#sound').setAttribute('aria-label',state.enabled&&!['uninitialized','suspended','interrupted'].includes(state.state)?'Mute sound':'Enable sound');$('#sound').classList.toggle('active',state.enabled);$('#sound').disabled=state.busy;$('#audio-status').textContent=state.error||'';};
+  listen($('#sound'),'click',()=>{const s=audio.getStats();if(s.enabled&&['uninitialized','suspended','interrupted'].includes(s.state))void audio.unlock();else void audio.toggle();});
   for(const channel of ['ambience','sfx'])listen($('#'+channel+'-volume'),'input',e=>audio.setVolume(channel,Number(e.target.value)/100));
   const unsubscribeAudio=audio.subscribe(updateAudio);updateAudio();
   const roomInput=$('input[name="room"]');
@@ -58,7 +58,7 @@ export function createUI({ client, audio, onViewChange = () => {} }) {
     $('#waiting-lobby h1 + p').hidden=Boolean(publicQueue);$('#lobby-copy').hidden=Boolean(publicQueue);$('#lobby-roster').hidden=Boolean(publicQueue);$('#lobby-status').hidden=Boolean(publicQueue);
     if(!publicQueue)return;
     $('#lobby-start').hidden=true;$('#lobby-ready').hidden=true;$('#lobby-leave').textContent='Cancel matchmaking';
-    $('#quick-wait').hidden=Boolean(client.quickQueue?.humanOnly);$('#quick-bot').hidden=!client.quickQueue?.humanOnly;
+    $('#quick-wait').hidden=Boolean(client.quickQueue?.humanOnly);$('#quick-bot').hidden=false;
     refreshCountdown();
     const offers=client.quickOffers||[],signature=JSON.stringify(offers.map(o=>({...o,elapsed:Math.floor(o.elapsed)})));
     if(signature===offerSignature)return;offerSignature=signature;

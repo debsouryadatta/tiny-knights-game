@@ -1,6 +1,17 @@
 import { enterPlayerName } from './helpers/player-name.js';
 import {test,expect} from '@playwright/test';
 
+test('bot button starts a match immediately without selecting human-only waiting',async({page})=>{
+ await page.goto('/');await enterPlayerName(page);await page.locator('#quick-play').click();
+ await expect(page.locator('#quick-queue')).toBeVisible();
+ if(await page.locator('.mobile-play-prompt').isVisible())await page.locator('#mobile-play-dismiss').click();
+ await expect(page.locator('#quick-countdown')).toContainText('until a bot match starts');
+ await expect(page.locator('#quick-bot')).toBeVisible();
+ await page.locator('#quick-bot').click();
+ await expect(page.locator('#join-screen')).toBeHidden({timeout:5000});
+ expect(await page.evaluate(()=>window.realm.match.actors.some(a=>a.kind==='hero'&&a.bot))).toBe(true);
+});
+
 test('live offer refresh removes every stale game and preserves focused choices',async({page})=>{
  await page.route('**/src/main.js',route=>route.fulfill({contentType:'application/javascript',body:''}));await page.goto('/');
  await page.evaluate(async()=>{

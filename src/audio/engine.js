@@ -39,7 +39,7 @@ export function createAudioEngine({contextFactory=()=>new (globalThis.AudioConte
       if(context.state!=='running')throw new Error('Audio resume rejected');
       error=null;void load();
       mix();
-    }catch{enabled=false;error='Sound is unavailable. Try enabling it again.';mix();}
+    }catch{error='Sound is unavailable. Tap to try again.';mix();}
     finally{busy=false;notify();}
   }
   async function toggle(){

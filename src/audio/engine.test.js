@@ -28,11 +28,13 @@ test('gesture initialization, independent channels, mute, limits and disposal',a
 });
 test('unavailable audio and asset failures never escape',async()=>{
  const unavailable=fixture({contextFactory:()=>{throw Error('no audio');}}).engine;
- await unavailable.unlock();assert.equal(unavailable.getStats().enabled,false);assert.ok(unavailable.getStats().error);
+ await unavailable.unlock();assert.equal(unavailable.getStats().enabled,true);assert.ok(unavailable.getStats().error);
  const {engine}=fixture({fetcher:async()=>{throw Error('offline');}});
  await engine.unlock();await settle();assert.equal(engine.getStats().loaded,0);assert.equal(engine.play('hit'),false);engine.destroy();
  const rejected=fixture();rejected.context.resume=async()=>{throw Error('blocked');};
- await rejected.engine.unlock();assert.equal(rejected.engine.getStats().enabled,false);rejected.engine.destroy();
+ await rejected.engine.unlock();assert.equal(rejected.engine.getStats().enabled,true);
+ rejected.context.resume=async()=>{rejected.context.state='running';};
+ await rejected.engine.unlock();assert.equal(rejected.engine.getStats().state,'running');rejected.engine.destroy();
 });
 test('deactivation removes loops and transient voices',async()=>{
  const {engine}=fixture();await engine.unlock();await settle();

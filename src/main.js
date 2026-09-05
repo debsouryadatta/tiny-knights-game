@@ -19,6 +19,7 @@ const unlockAudio = (event) => {
   if (event.isTrusted && !event.target?.closest?.('#sound')) audio.unlock();
 };
 document.addEventListener('pointerdown', unlockAudio);
+document.addEventListener('touchend', unlockAudio);
 document.addEventListener('keydown', unlockAudio);
 const ambience = createWorldAmbience(audio);
 const gameplayAudio = createGameplayAudio(audio, {
@@ -102,6 +103,7 @@ window.addEventListener('pagehide', () => {
   disposed = true;
   document.removeEventListener('visibilitychange', visibility);
   document.removeEventListener('pointerdown', unlockAudio);
+  document.removeEventListener('touchend', unlockAudio);
   document.removeEventListener('keydown', unlockAudio);
   audio.destroy();
   client.disconnect();
@@ -115,6 +117,7 @@ if (import.meta.hot)
     disposed = true;
     document.removeEventListener('visibilitychange', visibility);
     document.removeEventListener('pointerdown', unlockAudio);
+    document.removeEventListener('touchend', unlockAudio);
     document.removeEventListener('keydown', unlockAudio);
     audio.destroy();
     clearInterval(mapTimer);

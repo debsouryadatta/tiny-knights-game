@@ -66,20 +66,23 @@ test('unavailable audio leaves controls usable without uncaught errors',async({p
  await page.goto('/');await expect(page.locator('#sound')).toBeAttached();
  await page.evaluate(()=>{document.body.classList.remove('join-active');document.querySelector('#join-screen').remove();});
  await page.keyboard.press('Shift');
- await expect(page.locator('#sound')).toHaveAttribute('aria-pressed','false');
+ await expect(page.locator('#sound')).toHaveAttribute('aria-pressed','true');
  expect(await page.evaluate(()=>window.realm.audio.error)).toContain('unavailable');
  expect(errors).toEqual([]);
 });
 
-test('first interaction can mute without a later gesture re-enabling audio',async({page})=>{
+test('first sound tap starts audio; a later mute survives other gestures',async({page})=>{
  await page.goto('/');
  await expect.poll(()=>page.evaluate(()=>!!window.realm)).toBe(true);
  await page.evaluate(()=>{document.body.classList.remove('join-active');document.querySelector('#join-screen').remove();});
  await page.locator('#sound').click();
+ await expect.poll(()=>page.evaluate(()=>window.realm.audio.state)).toBe('running');
+ await expect(page.locator('#sound')).toHaveAttribute('aria-pressed','true');
+ await page.locator('#sound').click();
  await expect(page.locator('#sound')).toHaveAttribute('aria-pressed','false');
- expect(await page.evaluate(()=>window.realm.audio.initialized)).toBe(false);
+ expect(await page.evaluate(()=>window.realm.audio.initialized)).toBe(true);
  await page.keyboard.press('Shift');
- expect(await page.evaluate(()=>window.realm.audio.initialized)).toBe(false);
+ expect(await page.evaluate(()=>window.realm.audio.initialized)).toBe(true);
  expect(await page.evaluate(()=>window.realm.audio.enabled)).toBe(false);
 });
 
@@ -125,12 +128,15 @@ test('live match produces footsteps and confirmed ability audio',async({page},in
  await page.goto('/');
  await page.locator('input[name="room"]').fill('SFX'+Date.now().toString(36));
  await enterPlayerName(page);await page.locator('#create-room').click();
+ if(await page.locator('.mobile-play-prompt').isVisible())await page.locator('#mobile-play-dismiss').click();
  await page.locator('#lobby-start').click();
  await page.waitForFunction(()=>window.realm?.state.connected&&window.realm?.state.playerId);
  // Connection and player identity already exist in the waiting lobby. Wait for
  // the authoritative start snapshot before sending movement to the game.
  await expect(page.locator('#join-screen')).toBeHidden();
  await expect.poll(()=>page.evaluate(()=>window.realm.audio.loaded)).toBe(7);
+ expect(await page.evaluate(()=>window.realm.audio.enabled)).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>window.realm.audio.loops)).toBeGreaterThan(0);
  const before=await page.evaluate(()=>window.realm.audio.played);
  if(info.project.name==='desktop'){
   await page.keyboard.down('ArrowUp');await page.waitForTimeout(650);await page.keyboard.up('ArrowUp');

@@ -1,5 +1,27 @@
 import { test, expect } from '@playwright/test';
 
+test('touch music toggles once per tap and zoom recovery preserves pinch',async({page},info)=>{
+  test.skip(info.project.name==='desktop');
+  await page.goto('/');
+  await page.waitForFunction(()=>!!window.realm);
+  await page.evaluate(()=>{document.body.classList.remove('join-active');document.querySelector('#join-screen').remove();});
+  await page.locator('#sound').tap();
+  await expect.poll(()=>page.evaluate(()=>window.realm.audio.state)).toBe('running');
+  for(const enabled of [false,true,false,true]){
+    await page.locator('#sound').tap();
+    expect(await page.evaluate(()=>window.realm.audio.enabled)).toBe(enabled);
+    expect(await page.evaluate(()=>visualViewport.scale)).toBe(1);
+  }
+  await expect(page.locator('#reset-view')).toBeHidden();
+  await page.evaluate(()=>{Object.defineProperty(visualViewport,'scale',{configurable:true,get:()=>2});visualViewport.dispatchEvent(new Event('resize'));});
+  await expect(page.locator('#reset-view')).toBeVisible();
+  await page.locator('#reset-view').click();
+  await expect(page.locator('meta[name="viewport"]')).not.toHaveAttribute('content',/maximum-scale/);
+  expect(await page.locator('#game').evaluate(el=>getComputedStyle(el).touchAction)).toBe('pinch-zoom');
+  await page.evaluate(()=>{Object.defineProperty(visualViewport,'scale',{configurable:true,get:()=>1});visualViewport.dispatchEvent(new Event('resize'));});
+  await expect(page.locator('#reset-view')).toBeHidden();
+});
+
 // WebKit engine emulation, not a claim of testing iOS hardware or its browser chrome.
 test('WebKit phone lobby, gameplay, rotation and sound controls remain usable', async ({ page }, info) => {
   test.skip(info.project.name !== 'webkit-mobile', 'Opt in with MOBILE_WEBKIT=1 and install Playwright WebKit.');
@@ -27,9 +49,9 @@ test('WebKit phone lobby, gameplay, rotation and sound controls remain usable', 
     await page.touchscreen.tap(box.x+box.width/2,box.y+box.height/2);
   }
   expect(await page.evaluate(()=>visualViewport.scale)).toBe(initialScale);
-  expect(await page.locator('.hud').evaluate(el=>getComputedStyle(el).touchAction)).toBe('none');
+  expect(await page.locator('#game').evaluate(el=>getComputedStyle(el).touchAction)).toBe('pinch-zoom');
   expect(await page.evaluate(()=>getComputedStyle(document.documentElement).touchAction)).toBe('manipulation');
-  expect(await page.locator('#game').evaluate(el=>!el.dispatchEvent(new Event('gesturestart',{bubbles:true,cancelable:true})))).toBe(true);
+  expect(await page.locator('#game').evaluate(el=>el.dispatchEvent(new Event('gesturestart',{bubbles:true,cancelable:true})))).toBe(true);
   await page.locator('[data-slot="2"]').tap();
   await expect.poll(() => page.evaluate(() => {
     const hero = window.realm.match.actors.find(a => a.id === window.realm.state.playerId);
