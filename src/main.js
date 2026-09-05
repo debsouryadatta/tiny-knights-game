@@ -4,6 +4,7 @@ import { createAudioEngine } from './audio/engine.js';
 import { GameClient } from './network.ts';
 import { watchGamesPlayed } from './platform-stats.ts';
 import { installMobilePlayPrompt } from './mobile-play.js';
+import { installGameplayGestureGuard } from './gameplay-gestures.js';
 import './duel-lobby.css';
 import './combat-polish.css';
 import { createRenderer } from './renderer.js';
@@ -47,6 +48,8 @@ client.command = (command) => {
 };
 const ui = createUI({ client, audio, onViewChange: () => {} });
 const stopMobilePrompt=installMobilePlayPrompt();
+const stopGameplayGestures=installGameplayGestureGuard();
+window.addEventListener('pagehide',stopGameplayGestures,{once:true});
 window.addEventListener('pagehide',stopMobilePrompt,{once:true});
 const stopStats=watchGamesPlayed(count=>{
   const label=document.querySelector('#games-played');
@@ -107,6 +110,7 @@ window.addEventListener('pageshow', (event) => {
 });
 if (import.meta.hot)
   import.meta.hot.dispose(() => {
+    stopGameplayGestures();
     disposed = true;
     document.removeEventListener('visibilitychange', visibility);
     document.removeEventListener('pointerdown', unlockAudio);

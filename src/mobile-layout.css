@@ -132,3 +132,7 @@
 #install-guide ol{padding-left:24px}
 #install-guide li{margin:10px 0}
 #install-guide button{min-height:44px;padding:10px 24px;background:#e7c477;color:#081423;border:0;border-radius:8px;font:inherit;cursor:pointer}
+/* Disable double-tap zoom without removing pinch zoom or scrolling from menus. */
+html { touch-action: manipulation; }
+/* Combat gestures belong to the game, including taps on HUD labels and gaps. */
+#game, #ui .hud, #ui .topbar { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }

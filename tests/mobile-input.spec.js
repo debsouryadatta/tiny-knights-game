@@ -33,6 +33,7 @@ async function join(page) {
   await page.goto('/');
   await page.waitForFunction(() => window.realm?.state.ready);
   await enterPlayerName(page);await page.locator('#create-room').click();
+  if(await page.locator('.mobile-play-prompt').isVisible())await page.locator('#mobile-play-dismiss').click();
   await page.locator('#lobby-start').click();
   await expect(page.locator('#join-screen')).toBeHidden();
 }
