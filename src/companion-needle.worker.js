@@ -12,18 +12,32 @@ function postStatus(extra = {}) {
   self.postMessage({ type: 'status', status, ...extra });
 }
 
+function missing() {
+  const error = new Error('missing');
+  error.code = 'missing';
+  return error;
+}
+
+function isCactBytes(bytes) {
+  if (!bytes || bytes.length < 1_000_000) return false;
+  const head = String.fromCharCode(...bytes.subarray(0, 16));
+  return !/^\s*</.test(head);
+}
+
 async function loadBytes() {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(MODEL_URL);
-  if (cached?.ok) return new Uint8Array(await cached.arrayBuffer());
-  const response = await fetch(MODEL_URL);
-  if (!response.ok) {
-    const error = new Error('missing');
-    error.code = 'missing';
-    throw error;
+  if (cached?.ok) {
+    const bytes = new Uint8Array(await cached.arrayBuffer());
+    if (isCactBytes(bytes)) return bytes;
+    await cache.delete(MODEL_URL).catch(() => {});
   }
+  const response = await fetch(MODEL_URL);
+  const type = response.headers.get('content-type') || '';
+  if (!response.ok || type.includes('text/html')) throw missing();
   const clone = response.clone();
   const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!isCactBytes(bytes)) throw missing();
   await cache.put(MODEL_URL, clone).catch(() => {});
   return bytes;
 }
@@ -37,8 +51,8 @@ async function loadModel() {
     const bytes = await loadBytes();
     engine = NeedleV2Wasm.load(bytes);
     if (!engine) {
-      status = 'error';
-      postStatus({ error: 'Needle failed to load the .cact image.' });
+      status = 'missing';
+      postStatus({ error: 'Needle model not found. Run npm run fetch-needle.' });
       return;
     }
     status = 'ready';
