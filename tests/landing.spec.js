@@ -1,5 +1,35 @@
 import {test,expect} from '@playwright/test';
 
+test('mobile landscape prompt uses a gesture and handles unsupported fullscreen',async({page},info)=>{
+  test.skip(info.project.name==='desktop');
+  await page.addInitScript(()=>{
+    window.fullscreenRequests=0;
+    Element.prototype.requestFullscreen=async()=>{window.fullscreenRequests++;throw new Error('Unsupported');};
+  });
+  await page.goto('/');
+  await expect(page.locator('.mobile-play-prompt')).toBeVisible();
+  expect(await page.evaluate(()=>window.fullscreenRequests)).toBe(0);
+  await page.locator('#mobile-play-start').click();
+  expect(await page.evaluate(()=>window.fullscreenRequests)).toBe(1);
+  await expect(page.locator('#mobile-play-tip')).toContainText('Rotate your device');
+  await page.locator('#mobile-play-dismiss').click();
+  await expect(page.locator('.mobile-play-prompt')).toBeHidden();
+  await expect(page.locator('input[name="name"]')).toBeVisible();
+});
+
+test('supported mobile APIs request fullscreen then landscape, and rotation clears prompt',async({page},info)=>{
+  test.skip(info.project.name==='desktop');
+  await page.addInitScript(()=>{
+    window.mobileCalls=[];
+    Element.prototype.requestFullscreen=async()=>{window.mobileCalls.push('fullscreen');Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>document.documentElement});};
+    Object.defineProperty(screen.orientation,'lock',{configurable:true,value:async mode=>{window.mobileCalls.push(mode);}});
+  });
+  await page.goto('/');await page.locator('#mobile-play-start').click();
+  expect(await page.evaluate(()=>window.mobileCalls)).toEqual(['fullscreen','landscape']);
+  await page.setViewportSize({width:844,height:390});
+  await expect(page.locator('.mobile-play-prompt')).toBeHidden();
+});
+
 test('Tiny Knights branding and share artwork are present in crawler-readable HTML',async({page,request})=>{
   for(const path of ['/','/credits.html','/explore.html']){
     const response=await request.get(path);expect(response.ok()).toBe(true);
@@ -21,6 +51,7 @@ test('empty names are rejected; landing counter updates only after starting a ga
   await expect(page.locator('#games-played')).toHaveText(/^[\d,]+ games played$/);
   const count=()=>page.locator('#games-played').innerText().then(s=>BigInt(s.replace(/[^\d]/g,'')));
   const initial=await count();
+  expect(initial).toBeGreaterThanOrEqual(100n);
   await page.locator('#quick-play').click();
   await expect(page.locator('#join-error')).toContainText('Enter your name');
   await expect(page.locator('#waiting-lobby')).toBeHidden();

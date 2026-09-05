@@ -14,11 +14,20 @@ const control_clock = table({}, { key: t.string().primaryKey(), sentAt: t.u64() 
 const room_lobby = table({ public: true }, { room: t.string().primaryKey(), publicMatch: t.bool(), started: t.bool(), hostPlayerId: t.string(), readyPlayers: t.string() });
 const quick_queue = table({}, { room: t.string().primaryKey(), deadlineMicros: t.u64(), humanOnly: t.bool() });
 const platform_stats = table({ public: true }, { id: t.u8().primaryKey(), gamesPlayed: t.u64() });
-const db = schema({ match_state, membership, tick_timer, room_owner, connection, control_clock, room_lobby, quick_queue, platform_stats });
+const stats_migration = table({}, { id: t.string().primaryKey() });
+const db = schema({ match_state, membership, tick_timer, room_owner, connection, control_clock, room_lobby, quick_queue, platform_stats, stats_migration });
 export default db;
 
-// Explicit starts only: publishing never backfills existing matches.
+// User-requested baseline, applied once in the same transaction as its marker.
+function seedGameCount(ctx: ReducerCtx<typeof db.schemaType>) {
+  if(ctx.db.stats_migration.id.find('baseline-100-v1'))return;
+  const current=ctx.db.platform_stats.id.find(0);
+  if(current)ctx.db.platform_stats.id.update({...current,gamesPlayed:current.gamesPlayed+100n});
+  else ctx.db.platform_stats.insert({id:0,gamesPlayed:100n});
+  ctx.db.stats_migration.insert({id:'baseline-100-v1'});
+}
 function recordGameStart(ctx: ReducerCtx<typeof db.schemaType>) {
+  seedGameCount(ctx);
   const current = ctx.db.platform_stats.id.find(0);
   if (current) ctx.db.platform_stats.id.update({ ...current, gamesPlayed: current.gamesPlayed + 1n });
   else ctx.db.platform_stats.insert({ id: 0, gamesPlayed: 1n });
@@ -56,6 +65,7 @@ export const lobbyRoster = db.view({public:true},t.array(t.object('LobbyMember',
   return [...ctx.db.membership.iter()].filter(m=>m.room===member.room).map(m=>({playerId:m.playerId,online:[...ctx.db.connection.iter()].some(c=>c.identity.equals(m.identity))}));
 });
 export const init = db.init(ctx => {
+  seedGameCount(ctx);
   ctx.db.tick_timer.insert({ scheduledId: 0n, scheduledAt: ScheduleAt.interval(100_000n) });
 });
 const draftParams = { room: t.string(), name: t.string(), hero: t.string(), companion: t.string(), size: t.u8() };
@@ -327,6 +337,7 @@ export const controlCommand = db.reducer({ payload: t.string() }, (ctx, args) =>
 });
 export const tick = db.reducer({ onSchedule: tick_timer }, { timer: tick_timer.rowType }, (ctx) => {
   if (!ctx.sender.equals(ctx.identity)) throw new SenderError('Only server scheduler can advance time.');
+  seedGameCount(ctx);
   const online = new Set([...ctx.db.connection.iter()].map(c => c.identity.toHexString()));
   const activeRooms = new Set([...ctx.db.membership.iter()].filter(m => online.has(m.identity.toHexString())).map(m => m.room));
   for(const queue of ctx.db.quick_queue.iter()) {

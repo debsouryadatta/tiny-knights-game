@@ -10,6 +10,11 @@
   --hud-bottom: max(24px, var(--safe-bottom));
 }
 .hero-stack { display: contents; }
+.mobile-play-prompt { margin: 8px 0; padding: 8px 10px; border: 1px solid #e7c47755; border-radius: 4px; background: #081827e8; }
+.mobile-play-prompt p { font-size: 11px; line-height: 1.4; color: #cbd6de; margin: 0 0 6px; }
+.mobile-play-prompt > div { display: flex; gap: 8px; flex-wrap: wrap; }
+.mobile-play-prompt button { min-height: 44px; padding: 8px 12px; font-size: 12px; }
+.mobile-play-prompt #mobile-play-start { color: #081827; background: #e7c477; }
 .landing-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: #b8c5d4; }
 .landing-meta a { color: #e7c477; min-height: 44px; display: inline-flex; align-items: center; text-underline-offset: 4px; }
 #ui #xp-progress { height: 2px; margin-top: 3px; background: #071523; overflow: hidden; border-radius: 1px; }

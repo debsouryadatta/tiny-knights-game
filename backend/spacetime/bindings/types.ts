@@ -92,6 +92,11 @@ export const RoomOwner = __t.object("RoomOwner", {
 });
 export type RoomOwner = __Infer<typeof RoomOwner>;
 
+export const StatsMigration = __t.object("StatsMigration", {
+  id: __t.string(),
+});
+export type StatsMigration = __Infer<typeof StatsMigration>;
+
 export const TickTimer = __t.object("TickTimer", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),

@@ -10,7 +10,7 @@ export function watchGamesPlayed(update:(count:bigint|null)=>void) {
     connection=DbConnection.builder().withUri(databaseUri).withDatabaseName(databaseName)
       .onConnect(conn=>{
         if(stopped||connection!==conn){conn.disconnect();return;}
-        const read=()=>{if(!stopped&&connection===conn)update(conn.db.platformStats.id.find(0)?.gamesPlayed??0n);};
+        const read=()=>{if(!stopped&&connection===conn)update(conn.db.platformStats.id.find(0)?.gamesPlayed??null);};
         conn.db.platformStats.onInsert(read);conn.db.platformStats.onUpdate(read);
         conn.subscriptionBuilder().onApplied(read).onError(()=>{conn.disconnect();schedule();}).subscribe('SELECT * FROM platform_stats');
       }).onConnectError(schedule).onDisconnect(schedule).build();

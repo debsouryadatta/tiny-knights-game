@@ -3,6 +3,7 @@ import { createGameplayAudio } from './audio/gameplay.js';
 import { createAudioEngine } from './audio/engine.js';
 import { GameClient } from './network.ts';
 import { watchGamesPlayed } from './platform-stats.ts';
+import { installMobilePlayPrompt } from './mobile-play.js';
 import './duel-lobby.css';
 import './combat-polish.css';
 import { createRenderer } from './renderer.js';
@@ -45,6 +46,8 @@ client.command = (command) => {
   sendCommand(command);
 };
 const ui = createUI({ client, audio, onViewChange: () => {} });
+const stopMobilePrompt=installMobilePlayPrompt();
+window.addEventListener('pagehide',stopMobilePrompt,{once:true});
 const stopStats=watchGamesPlayed(count=>{
   const label=document.querySelector('#games-played');
   if(label)label.textContent=count===null?'Games played · unavailable':`${count.toLocaleString()} games played`;
