@@ -1,3 +1,4 @@
+import { enterPlayerName } from './helpers/player-name.js';
 import { test, expect } from '@playwright/test';
 import { WIDTH, HEIGHT, baseFor, spawnFor, isWalkable, resourceSeeds, laneWaypoints } from '../shared/map.ts';
 
@@ -7,9 +8,9 @@ async function join(page, room) {
   await page.locator('input[name="name"]').fill('Playtester');
   if(room){
     await page.locator('input[name="room"]').fill(room);
-    await page.locator('#join').click();
+    await enterPlayerName(page);await page.locator('#join').click();
   }else{
-    await page.locator('#create-room').click();
+    await enterPlayerName(page);await page.locator('#create-room').click();
     await expect(page.locator('#waiting-lobby')).toBeVisible();
     room=await page.locator('#lobby-copy').textContent();
     await page.locator('#lobby-start').click();

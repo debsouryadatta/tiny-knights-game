@@ -1,3 +1,4 @@
+import { enterPlayerName } from './helpers/player-name.js';
 import {test,expect} from '@playwright/test';
 
 test('terrain and minimap survive a 2048px canvas limit and context recovery',async({page},info)=>{
@@ -16,7 +17,7 @@ test('terrain and minimap survive a 2048px canvas limit and context recovery',as
   await page.goto('/');
   await page.waitForFunction(()=>window.realm?.state.ready);
   await page.locator('input[name="room"]').fill(`MEM${Date.now().toString(36)}`);
-  await page.locator('#create-room').click();
+  await enterPlayerName(page);await page.locator('#create-room').click();
   await page.locator('#lobby-start').click();
   await page.waitForFunction(()=>window.realm?.state.connected&&window.realm.state.playerId);
   await expect.poll(()=>page.evaluate(()=>window.realm.state.renderer.terrainChunks)).toBeGreaterThan(0);
@@ -48,7 +49,7 @@ test('public tunnel serves the chunk renderer and a colored mobile battlefield',
     await page.goto(process.env.PLAYWRIGHT_TUNNEL_URL);
     await page.waitForFunction(()=>window.realm?.state.ready,undefined,{timeout:30000});
     await page.locator('input[name="room"]').fill(`TUN${Date.now().toString(36)}`);
-    await page.locator('#create-room').click();
+    await enterPlayerName(page);await page.locator('#create-room').click();
     await page.locator('#lobby-start').click();
     await page.waitForFunction(()=>window.realm?.state.connected&&window.realm.state.playerId);
     await expect.poll(()=>page.evaluate(()=>window.realm.state.renderer.terrainChunks)).toBeGreaterThan(0);

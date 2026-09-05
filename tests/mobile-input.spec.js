@@ -1,3 +1,4 @@
+import { enterPlayerName } from './helpers/player-name.js';
 import { test, expect } from '@playwright/test';
 
 const pageErrors = new WeakMap();
@@ -31,7 +32,7 @@ async function join(page) {
   await page.setViewportSize({ width: 844, height: 390 });
   await page.goto('/');
   await page.waitForFunction(() => window.realm?.state.ready);
-  await page.locator('#create-room').click();
+  await enterPlayerName(page);await page.locator('#create-room').click();
   await page.locator('#lobby-start').click();
   await expect(page.locator('#join-screen')).toBeHidden();
 }

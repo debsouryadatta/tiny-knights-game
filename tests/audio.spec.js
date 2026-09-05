@@ -1,3 +1,4 @@
+import { enterPlayerName } from './helpers/player-name.js';
 import {test,expect} from '@playwright/test';
 
 test('all shipped clips decode to finite non-silent audio without clipping',async({page})=>{
@@ -123,7 +124,7 @@ test('live match produces footsteps and confirmed ability audio',async({page},in
  test.skip(!process.env.AUDIO_LIVE_MATCH,'Requires a running match server');
  await page.goto('/');
  await page.locator('input[name="room"]').fill('SFX'+Date.now().toString(36));
- await page.locator('#create-room').click();
+ await enterPlayerName(page);await page.locator('#create-room').click();
  await page.locator('#lobby-start').click();
  await page.waitForFunction(()=>window.realm?.state.connected&&window.realm?.state.playerId);
  // Connection and player identity already exist in the waiting lobby. Wait for

@@ -1,3 +1,4 @@
+import { enterPlayerName } from './helpers/player-name.js';
 import { test, expect } from '@playwright/test';
 
 async function openLobby(page) {
@@ -12,7 +13,7 @@ async function submitDraft(page, room, name, create = false) {
   await openLobby(page);
   await page.locator('input[name="name"]').fill(name);
   await page.locator('input[name="room"]').fill(room);
-  await page.locator(create ? '#create-room' : '#join').click();
+  await enterPlayerName(page);await page.locator(create ? '#create-room' : '#join').click();
 }
 
 async function join(page, room, name, create = false) {

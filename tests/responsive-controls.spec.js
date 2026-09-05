@@ -1,3 +1,4 @@
+import { enterPlayerName } from './helpers/player-name.js';
 import {test,expect} from '@playwright/test';
 
 const sizes=[[1600,720],[844,390],[390,844]];
@@ -14,7 +15,7 @@ for(const [width,height] of sizes)test(`touch HUD has usable non-overlapping tar
     await page.goto(process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4177/');
     await page.waitForFunction(()=>window.realm?.state.ready);
     await page.locator('input[name="room"]').fill(`HUD${Date.now().toString(36)}`);
-    await page.locator('#create-room').click();
+    await enterPlayerName(page);await page.locator('#create-room').click();
     await page.locator('#lobby-start').click();
     await expect(page.locator('#join-screen')).toBeHidden();
     const boxes=await page.evaluate(selectors=>selectors.map(selector=>{

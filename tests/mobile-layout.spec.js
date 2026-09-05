@@ -1,3 +1,4 @@
+import { enterPlayerName } from './helpers/player-name.js';
 import {test,expect} from '@playwright/test';
 
 const sizes=[[667,375],[740,360],[844,390],[932,430],[390,844],[320,568]];
@@ -57,7 +58,7 @@ for(const [width,height] of sizes)test(`mobile draft, private lobby and combat r
     for(const selector of ['input[name="room"]','#join','#quick-play','#create-room'])await reachable(page,selector,width,keyboardHeight);
     await page.screenshot({path:info.outputPath('keyboard-sized-draft.png')});
     await page.setViewportSize({width,height});
-    await page.locator('#create-room').click();
+    await enterPlayerName(page);await page.locator('#create-room').click();
     await expect(page.locator('#waiting-lobby')).toBeVisible();
     for(const selector of ['#lobby-copy','#lobby-start','#lobby-leave'])await reachable(page,selector,width,height);
     await expect(page.locator('#lobby-roster')).toContainText('Long Commander 123');

@@ -53,6 +53,7 @@ import LobbyRosterRow from "./lobby_roster_table";
 import MatchStateRow from "./match_state_table";
 import MyQuickQueueRow from "./my_quick_queue_table";
 import MySessionRow from "./my_session_table";
+import PlatformStatsRow from "./platform_stats_table";
 import QuickMatchOffersRow from "./quick_match_offers_table";
 import RoomLobbyRow from "./room_lobby_table";
 
@@ -71,6 +72,17 @@ const tablesSchema = __schema({
       { name: 'match_state_room_key', constraint: 'unique', columns: ['room'] },
     ],
   }, MatchStateRow),
+  platformStats: __table({
+    name: 'platform_stats',
+    indexes: [
+      { accessor: 'id', name: 'platform_stats_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'platform_stats_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, PlatformStatsRow),
   roomLobby: __table({
     name: 'room_lobby',
     indexes: [
@@ -135,6 +147,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
   tables: typeof tablesSchema.schemaType.tables & {
     /** @deprecated Use `matchState` instead. This alias will be removed in the next major version. */
     readonly "match_state": Omit<typeof tablesSchema.schemaType.tables["matchState"], "accessorName"> & { readonly accessorName: "match_state" };
+    /** @deprecated Use `platformStats` instead. This alias will be removed in the next major version. */
+    readonly "platform_stats": Omit<typeof tablesSchema.schemaType.tables["platformStats"], "accessorName"> & { readonly accessorName: "platform_stats" };
     /** @deprecated Use `roomLobby` instead. This alias will be removed in the next major version. */
     readonly "room_lobby": Omit<typeof tablesSchema.schemaType.tables["roomLobby"], "accessorName"> & { readonly accessorName: "room_lobby" };
   };
@@ -156,6 +170,7 @@ const REMOTE_MODULE = {
 
 const tableAccessorAliases = {
   "match_state": "matchState",
+  "platform_stats": "platformStats",
   "room_lobby": "roomLobby",
 } as const;
 
@@ -179,6 +194,8 @@ type __DbViewBase = __DbConnectionImpl<typeof REMOTE_MODULE>["db"];
 export type DbView = __DbViewBase & {
   /** @deprecated Use `matchState` instead. This alias will be removed in the next major version. */
   readonly "match_state": __DbViewBase["matchState"];
+  /** @deprecated Use `platformStats` instead. This alias will be removed in the next major version. */
+  readonly "platform_stats": __DbViewBase["platformStats"];
   /** @deprecated Use `roomLobby` instead. This alias will be removed in the next major version. */
   readonly "room_lobby": __DbViewBase["roomLobby"];
 };
@@ -187,6 +204,8 @@ type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
   /** @deprecated Use `matchState` instead. This alias will be removed in the next major version. */
   readonly "match_state": __TablesBase["matchState"];
+  /** @deprecated Use `platformStats` instead. This alias will be removed in the next major version. */
+  readonly "platform_stats": __TablesBase["platformStats"];
   /** @deprecated Use `roomLobby` instead. This alias will be removed in the next major version. */
   readonly "room_lobby": __TablesBase["roomLobby"];
 };

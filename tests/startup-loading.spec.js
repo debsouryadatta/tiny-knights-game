@@ -1,3 +1,4 @@
+import { enterPlayerName } from './helpers/player-name.js';
 import { test, expect } from '@playwright/test';
 
 const room = () => `QA${Date.now().toString(36)}`;
@@ -7,7 +8,7 @@ const optionalArt = /(?:House1|Tree[234]|Bushe[1234]|_Run|_Attack1|_Shoot|_Right
 async function draft(page, name) {
   await page.locator('input[name="name"]').fill(name);
   await page.locator('input[name="room"]').fill(room());
-  await page.locator('#create-room').click();
+  await enterPlayerName(page);await page.locator('#create-room').click();
 }
 
 test('native progress is visible before the game module arrives', async ({ page }) => {

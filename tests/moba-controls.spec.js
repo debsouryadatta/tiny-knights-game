@@ -1,3 +1,4 @@
+import { enterPlayerName } from './helpers/player-name.js';
 import { test, expect } from '@playwright/test';
 
 async function join(page) {
@@ -5,7 +6,7 @@ async function join(page) {
   await page.waitForFunction(() => window.realm?.state.ready);
   await page.locator('input[name="name"]').fill('Controls QA');
   await page.locator('input[name="room"]').fill(`MO${Date.now().toString(36)}`);
-  await page.locator('#create-room').click();
+  await enterPlayerName(page);await page.locator('#create-room').click();
   await page.locator('#lobby-start').click();
   await page.waitForFunction(() => window.realm?.state.connected && window.realm.state.playerId);
   await expect(page.locator('#join-screen')).toBeHidden();

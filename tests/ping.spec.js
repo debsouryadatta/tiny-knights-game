@@ -1,10 +1,11 @@
+import { enterPlayerName } from './helpers/player-name.js';
 import {test,expect} from '@playwright/test';
 
 test('ping updates while idle and fits beside corner controls',async({page},info)=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');await page.waitForFunction(()=>window.realm?.state.ready);
   await page.locator('input[name="room"]').fill(`QA${Date.now().toString(36)}`);
-  await page.locator('#create-room').click();await page.locator('#lobby-start').click();await expect(page.locator('#join-screen')).toBeHidden();
+  await enterPlayerName(page);await page.locator('#create-room').click();await page.locator('#lobby-start').click();await expect(page.locator('#join-screen')).toBeHidden();
   const ping=page.locator('#ping-indicator');
   await expect(ping).toHaveText(/Ping \d+ ms/);
   const samples=Number(await ping.getAttribute('data-samples'));
@@ -23,7 +24,7 @@ test('socket loss replaces the ping with reconnecting and a fresh reply restores
   await page.routeWebSocket(/\/subscribe/,ws=>{connection=ws;ws.connectToServer();});
   await page.goto('/');await page.waitForFunction(()=>window.realm?.state.ready);
   await page.locator('input[name="room"]').fill(`QA${Date.now().toString(36)}`);
-  await page.locator('#create-room').click();await page.locator('#lobby-start').click();
+  await enterPlayerName(page);await page.locator('#create-room').click();await page.locator('#lobby-start').click();
   await expect(page.locator('#ping-indicator')).toHaveText(/Ping \d+ ms/);
   await connection.close({code:1012,reason:'Reconnect test'});
   await expect(page.locator('#ping-indicator')).toHaveText('Reconnecting');

@@ -52,6 +52,12 @@ export type MyQuickQueue = __Infer<typeof MyQuickQueue>;
 export const MySession = __t.object("MySession", {});
 export type MySession = __Infer<typeof MySession>;
 
+export const PlatformStats = __t.object("PlatformStats", {
+  id: __t.u8(),
+  gamesPlayed: __t.u64(),
+});
+export type PlatformStats = __Infer<typeof PlatformStats>;
+
 export const QuickMatchOffer = __t.object("QuickMatchOffer", {
   room: __t.string(),
   blueScore: __t.u32(),

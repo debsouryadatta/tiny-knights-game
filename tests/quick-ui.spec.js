@@ -1,3 +1,4 @@
+import { enterPlayerName } from './helpers/player-name.js';
 import {test,expect} from '@playwright/test';
 
 test('live offer refresh removes every stale game and preserves focused choices',async({page})=>{
@@ -21,11 +22,11 @@ test('Quick Play offers explicit mid-game consent, human-only waiting, and bot f
  const contexts=[];
  const newPlayer=async()=>{const context=await browser.newContext({baseURL,viewport:{width:844,height:390},isMobile:true,hasTouch:true});contexts.push(context);const page=await context.newPage();await page.goto('/');return page;};
  try{
-  const first=await newPlayer();await first.locator('#quick-play').click();
+  const first=await newPlayer();await enterPlayerName(first);await first.locator('#quick-play').click();
   await expect(first.locator('#quick-queue')).toBeVisible();await expect(first.locator('#quick-countdown')).toContainText('until a bot match starts');
   await expect(first.locator('#join-screen')).toBeHidden({timeout:20000});
   const originalRoom=await first.evaluate(()=>window.realm.state.room);
-  const second=await newPlayer();await second.locator('#quick-play').click();
+  const second=await newPlayer();await enterPlayerName(second);await second.locator('#quick-play').click();
   await expect(second.locator('#quick-queue')).toBeVisible();
   const offer=second.locator(`.quick-offer[data-room="${originalRoom}"]`);
   await expect(offer).toContainText(/Blue \d+ – \d+ Red/);
@@ -35,7 +36,7 @@ test('Quick Play offers explicit mid-game consent, human-only waiting, and bot f
   await offer.locator('button').click();await expect(second.locator('#join-screen')).toBeHidden();
   expect(await second.evaluate(()=>window.realm.state.room)).toBe(originalRoom);
   await expect(second.locator('#blue-score')).toHaveAttribute('aria-label',/hero kills: \d+ of 21/);
-  const third=await newPlayer();await third.locator('#quick-play').click();await expect(third.locator('#quick-queue')).toBeVisible();
+  const third=await newPlayer();await enterPlayerName(third);await third.locator('#quick-play').click();await expect(third.locator('#quick-queue')).toBeVisible();
   await third.locator('#quick-wait').click();await third.locator('#quick-bot').click();await expect(third.locator('#join-screen')).toBeHidden();
  }finally{for(const context of contexts)await context.close();}
 });
@@ -45,11 +46,11 @@ test('waiting humans pair automatically and queue controls fit phone portrait',a
  const a=await browser.newContext({baseURL,viewport:{width:390,height:844},isMobile:true,hasTouch:true}),b=await browser.newContext({baseURL});
  try{
  const first=await a.newPage(),second=await b.newPage();await first.goto('/');await second.goto('/');
- await first.locator('#quick-play').click();await expect(first.locator('#quick-queue')).toBeVisible();await first.locator('#quick-wait').click();
+ await enterPlayerName(first);await first.locator('#quick-play').click();await expect(first.locator('#quick-queue')).toBeVisible();await first.locator('#quick-wait').click();
  await expect(first.locator('#quick-bot')).toBeVisible();
  const overflow=await first.evaluate(()=>document.documentElement.scrollWidth>innerWidth);expect(overflow).toBe(false);
  for(const selector of ['#quick-bot','#lobby-leave']){const box=await first.locator(selector).boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);}
- await second.locator('#quick-play').click();await expect(first.locator('#join-screen')).toBeHidden();await expect(second.locator('#join-screen')).toBeHidden();
+ await enterPlayerName(second);await second.locator('#quick-play').click();await expect(first.locator('#join-screen')).toBeHidden();await expect(second.locator('#join-screen')).toBeHidden();
  expect(await second.evaluate(()=>window.realm.state.room)).toBe(await first.evaluate(()=>window.realm.state.room));
  }finally{await a.close();await b.close();}
 });
