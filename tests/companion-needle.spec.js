@@ -19,6 +19,7 @@ async function join(page, room = `QA${Date.now().toString(36)}`) {
 
 test('typed companion line issues the matching standing order', async ({ page }) => {
   await join(page);
+  await page.locator('#companion-toggle').click();
   await expect(page.locator('#companion-command')).toBeVisible();
   await page.locator('#companion-line').fill('come back to me');
   await page.locator('#companion-send').click();

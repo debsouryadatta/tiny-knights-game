@@ -87,7 +87,7 @@ export function createUI({ client, audio, companionNeedle, onViewChange = () => 
   root.querySelectorAll('[data-action]:not([data-action="attack"]):not([data-action="ability"])').forEach(b=>listen(b,'click',()=>action(b.dataset.action)));
   root.querySelectorAll('[data-order]').forEach(b=>listen(b,'click',()=>{client.command({type:'order',order:b.dataset.order});$('#orders').hidden=true;$('#companion-toggle').setAttribute('aria-expanded','false');}));
   listen($('#companion-toggle'),'click',()=>{$('#orders').hidden=!$('#orders').hidden;$('#companion-toggle').setAttribute('aria-expanded',String(!$('#orders').hidden));});
-  $('#companion-toggle').insertAdjacentHTML('afterend',`<form id="companion-command" class="companion-command"><label for="companion-line">Tell your squire</label><div class="companion-command-row"><input id="companion-line" name="line" maxlength="120" autocomplete="off" placeholder="come to me, go farm…"><button type="submit" id="companion-send">Say</button></div><small id="companion-needle-status">Needle loading…</small></form>`);
+  $('#orders').insertAdjacentHTML('beforeend',`<form id="companion-command" class="companion-command"><label for="companion-line">Tell your squire</label><div class="companion-command-row"><input id="companion-line" name="line" maxlength="120" autocomplete="off" placeholder="come to me, go farm…"><button type="submit" id="companion-send">Say</button></div><small id="companion-needle-status">Needle loading…</small></form>`);
   const needleStatus=$('#companion-needle-status'),needleLine=$('#companion-line'),needleSend=$('#companion-send');
   const needleUnsub=companionNeedle?.subscribe(({status,error})=>{
     needleStatus.textContent=status==='ready'?'Local Needle':status==='loading'?'Needle loading…':status==='missing'?'Phrase matching · Needle optional':error||'Phrase matching only';
@@ -105,8 +105,6 @@ export function createUI({ client, audio, companionNeedle, onViewChange = () => 
       if(result.ok){
         client.command(result.command);
         needleLine.value='';
-        $('#orders').hidden=true;
-        $('#companion-toggle').setAttribute('aria-expanded','false');
         message(`Order: ${result.command.order}`);
       }else{
         message(result.reason==='missing'?'Needle model missing. Run npm run fetch-needle.':result.reason==='not_ready'?'Needle is still loading.':"Didn't catch that.",result.reason==='missing'||result.reason==='not_ready');
