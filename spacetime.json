@@ -4,7 +4,7 @@
   },
   "database": "tiny-knights-prototype",
   "module-path": "backend/spacetime/module/spacetimedb",
-  "server": "http://127.0.0.1:3005",
+  "server": "https://spacetime.tinkerers.space",
   "generate": [
     { "language": "typescript", "out-dir": "backend/spacetime/bindings" }
   ]

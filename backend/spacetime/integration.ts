@@ -9,7 +9,7 @@ async function waitFor(test: () => boolean, label: string) {
 }
 async function connect(token?: string) {
   return new Promise<{ conn: DbConnection; token: string }>((resolve, reject) => {
-    const conn = DbConnection.builder().withUri(process.env.SPACETIME_TEST_URI || 'http://127.0.0.1:3005').withDatabaseName(process.env.SPACETIME_TEST_DATABASE || 'tiny-knights-prototype').withToken(token)
+    const conn = DbConnection.builder().withUri(process.env.SPACETIME_TEST_URI || 'https://spacetime.tinkerers.space').withDatabaseName(process.env.SPACETIME_TEST_DATABASE || 'tiny-knights-prototype').withToken(token)
       .onConnect((c, _identity, nextToken) => {
         c.subscriptionBuilder().onApplied(() => resolve({ conn: c, token: nextToken }))
           .onError(ctx => reject(ctx.event)).subscribe([`SELECT * FROM match_state WHERE room = '${room}'`, 'SELECT * FROM my_session']);

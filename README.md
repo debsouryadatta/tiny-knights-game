@@ -2,25 +2,32 @@
 
 The main route is a strict 1v1 multiplayer duel built on the Canvas 2D engine and Tiny Swords sprites. Each side has one hero and one personal companion. Three-minion waves push the central lane toward the enemy core. Create a duel, then click the room code in the match to copy an invite link. Your friend takes the opposing bot's seat; a third player cannot join. Guardian and Scout escort by default, while Harvester gathers resources. Older 2v2/3v3 rooms cannot be joined; create a new duel.
 
-Play at [little-realm-duel.vercel.app](https://little-realm-duel.vercel.app). The Canvas/Vite frontend runs on Vercel and connects directly to the updated [`debsouryadatta-tiny-knights`](https://spacetimedb.com/debsouryadatta-tiny-knights) Maincloud database. No React, local server, or ngrok tunnel is needed to play. See [cloud deployment](design/cloud-deployment.md) for the deployment repository, update commands, and verification notes.
+Play at [little-realm-duel.vercel.app](https://little-realm-duel.vercel.app). The Canvas/Vite frontend runs on Vercel and connects directly to the self-hosted `tiny-knights-prototype` database at `https://spacetime.tinkerers.space`. Caddy terminates TLS and forwards the SDK's secure WebSocket connection to SpacetimeDB. See [cloud deployment](design/cloud-deployment.md) for deployment commands and verification notes.
 
-Run `npm install` then `npm run dev -- --port 4177`. Open http://localhost:4177. By default the local frontend requires SpacetimeDB on port 3005, database `tiny-knights-prototype`. `bash backend/spacetime/run.sh publish` publishes the local module; `bash backend/spacetime/run.sh integration` checks real SDK multiplayer behavior. The local convenience script currently reuses the CLI/runtime in adjacent `empire-game/backend/spacetime`; this is not yet a standalone local deployment installer. Cloud publishing uses your global Maincloud login instead.
+Run `npm install` then `npm run dev -- --port 4177`. Open http://localhost:4177. Local development and Vercel both connect directly to `https://spacetime.tinkerers.space`, database `tiny-knights-prototype`. `bash backend/spacetime/run.sh publish` publishes the module to the `home` server alias; `bash backend/spacetime/run.sh integration` checks real SDK multiplayer behavior.
 
 Current controls: WASD/arrows or joystick for continuous movement, hold Space/Attack to attack, Q/E/F for three skills, R recall, T regen, C gather, B tower placement, M overview, G grid, Escape cancel. Tap an enemy to target it. Drag a skill to aim and release to cast; drag toward Cancel to abort. Recall takes three seconds and movement or damage interrupts it. Landscape is recommended; fullscreen support varies by browser/OS.
 
 The top-right Ping indicator measures an application round trip over the live SpacetimeDB socket, including server response time. It uses a temporary read-only session subscription about every three seconds, even while idle. Green means under 100 ms, amber 100–199 ms, and red 200 ms or more. A three-second timeout shows `Ping >3s`; reconnecting hides the old measurement. This is not FPS, Vercel load time, or an ICMP network-only measurement.
 
-### Local backend development
+### SpacetimeDB development
 
-With the existing local SpacetimeDB server running on port 3005, run this from the repository root:
+Install SpacetimeDB CLI 2.10.0 and configure the self-hosted server once:
+
+```sh
+spacetime version use 2.10.0
+spacetime server add --url https://spacetime.tinkerers.space --default home
+```
+
+Then run this from the repository root:
 
 ```sh
 npm run game
 ```
 
-This builds the nested server module, regenerates `backend/spacetime/bindings`, publishes to `tiny-knights-prototype` without deleting data, starts Vite on port 4177, and watches the module. Do not start a second Vite process on the same port. Root `spacetime.json` defines these local targets using the [SpacetimeDB configuration format](https://spacetimedb.com/docs/cli-reference/spacetime-json/). Personal `spacetime*.local.json` overrides are ignored by Git.
+This builds the nested server module, regenerates `backend/spacetime/bindings`, publishes to `tiny-knights-prototype` without deleting data, starts Vite on port 4177, and watches the module. Do not start a second Vite process on the same port. Root `spacetime.json` defines these targets. Personal `spacetime*.local.json` overrides are ignored by Git.
 
-Use the helper on this checkout because the existing database belongs to the isolated CLI identity in the adjacent `empire-game/backend/spacetime/.runtime` directory. A bare `spacetime dev` uses your global CLI login, which may not own this database. The helper does not change that login. This is still a local setup, not a cloud deployment. Do not use `--template chat-react-ts` inside this existing game.
+The CLI identity must have update permission on the existing self-hosted database. Do not run `spacetime init` or use a starter template inside this repository. The game module already lives at `backend/spacetime/module/spacetimedb`.
 
 Actors now use continuous positions and physical separation. Tiles remain terrain and construction units. Shared collision runs on both server and local prediction; stop/release and simultaneous movement/action inputs have separate handling.
 
