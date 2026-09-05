@@ -3,7 +3,7 @@ import { DbConnection } from './bindings';
 
 // Use an isolated local database: this suite creates several persistent matches.
 const uri = process.env.SPACETIME_TEST_URI || 'http://127.0.0.1:3011';
-const database = process.env.SPACETIME_TEST_DATABASE || 'tiny-knights-prototype';
+const database = process.env.SPACETIME_TEST_DATABASE || 'little-realm-live';
 const prefix = `LOBBY-${Date.now().toString(36).toUpperCase()}`;
 const active: DbConnection[] = [];
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

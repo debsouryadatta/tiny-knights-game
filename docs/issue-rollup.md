@@ -53,10 +53,10 @@ No physical phone, actual OS keyboard, browser chrome, or thermal/battery test w
 The new frontend requires the additive `room_lobby` table, `lobby_roster` view and lobby reducers. Publish the backend before deploying the frontend. Existing tables retain their schema; do not use `--delete-data`.
 
 ```sh
-# Requires the owner/publisher identity for tiny-knights-prototype.
+# Publishes to the new little-realm-live database by default.
 bash backend/spacetime/run.sh publish
 bash backend/spacetime/run.sh integration
 npx tsx backend/spacetime/lobby-integration.ts
 ```
 
-The self-hosted database previously rejected this checkout's CLI identity with HTTP 403. Until an authorized identity publishes the module, leave the current Vercel production deployment unchanged. No changes should be pushed to the source qKitNp repository. Vercel administration, if needed, uses the signed-in in-app browser, not the Vercel CLI.
+The existing database rejected this checkout's CLI identity, so the completed module was published to a new database named `little-realm-live` on the same self-hosted server. Local development and every Vercel environment now use it. The original database remains unchanged. No changes should be pushed to the source qKitNp repository.

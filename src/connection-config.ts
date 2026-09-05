@@ -1,10 +1,10 @@
 // Public build-time connection settings. Never put provider or publisher keys here.
-export const databaseName = import.meta.env.VITE_SPACETIMEDB_DB_NAME || 'tiny-knights-prototype';
+export const databaseName = import.meta.env.VITE_SPACETIMEDB_DB_NAME || 'little-realm-live';
 export const databaseUri = import.meta.env.VITE_SPACETIMEDB_URI || 'https://spacetime.tinkerers.space';
 
 // Keep identities separate when a developer explicitly points the client at its own origin.
 export function sessionKey(room: string) {
-  const prefix = databaseName === 'tiny-knights-prototype' && databaseUri === location.origin
+  const prefix = databaseUri === location.origin
     ? 'tiny-knights-session'
     : `tiny-knights-session:${databaseUri}:${databaseName}`;
   return `${prefix}:${room}`;

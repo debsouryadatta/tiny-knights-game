@@ -2,7 +2,7 @@
 
 ## Live backend
 
-- Database: `tiny-knights-prototype`
+- Database: `little-realm-live`
 - SDK origin: `https://spacetime.tinkerers.space`
 - WebSocket: `wss://spacetime.tinkerers.space`
 - CLI server alias: `home`
@@ -29,16 +29,16 @@ Set these public build-time variables for Production, Preview, and Development:
 
 ```dotenv
 VITE_SPACETIMEDB_URI=https://spacetime.tinkerers.space
-VITE_SPACETIMEDB_DB_NAME=tiny-knights-prototype
+VITE_SPACETIMEDB_DB_NAME=little-realm-live
 VITE_COMPANION_PLANNER=false
 ```
 
 The SpacetimeDB values are public connection details, not publisher credentials. Do not put login tokens or server secrets in a `VITE_` variable. Redeploy after changing build-time variables.
 
-Deploy the frontend with:
+Deploy the frontend with the authenticated Vercel CLI or by pushing the verified commit to `main` in the deployment repository:
 
 ```sh
-vercel --prod
+vercel --prod --yes
 ```
 
 ## Verification
@@ -46,7 +46,7 @@ vercel --prod
 ```sh
 spacetime server ping home
 spacetime list -s home
-spacetime sql -s home tiny-knights-prototype "SELECT room, revision FROM match_state"
+spacetime sql -s home little-realm-live "SELECT room, revision FROM match_state"
 npx tsx backend/spacetime/integration.ts
 npm run build
 ```

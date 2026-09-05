@@ -4,6 +4,7 @@ spacetime_dir="$(cd "$(dirname "$0")" && pwd)"
 project_dir="$(cd "$spacetime_dir/../.." && pwd)"
 cli="${SPACETIME_CLI:-spacetime}"
 server="${SPACETIME_SERVER:-home}"
+database="${SPACETIME_DATABASE:-little-realm-live}"
 case "${1:-publish}" in
   dev)
     cd "$project_dir"
@@ -11,7 +12,7 @@ case "${1:-publish}" in
     ;;
   publish)
     cd "$project_dir"
-    exec "$cli" publish -s "$server" --module-path "$spacetime_dir/module/spacetimedb" --delete-data=never --yes tiny-knights-prototype
+    exec "$cli" publish -s "$server" --module-path "$spacetime_dir/module/spacetimedb" --delete-data=never --yes "$database"
     ;;
   generate)
     cd "$project_dir"

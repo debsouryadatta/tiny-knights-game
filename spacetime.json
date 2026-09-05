@@ -2,7 +2,7 @@
   "dev": {
     "run": "npm run dev"
   },
-  "database": "tiny-knights-prototype",
+  "database": "little-realm-live",
   "module-path": "backend/spacetime/module/spacetimedb",
   "server": "https://spacetime.tinkerers.space",
   "generate": [
