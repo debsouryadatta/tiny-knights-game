@@ -2,7 +2,7 @@ import { getMainAction, createMainActionHold } from './contextual-action.js';
 import { packIcon } from './pack-icons.js';
 import './waiting-lobby.css';
 import './mobile-layout.css';
-export function createUI({ client, audio, onViewChange = () => {} }) {
+export function createUI({ client, audio, companionNeedle, onViewChange = () => {} }) {
   const root = document.querySelector('#ui');
   const view = { tactical: false, inspect: null, grid: false, buildMode: false, inputDisabled: true, aim: null };
   let currentSession, hero, latestState, joining = false, resultShown = false, lastError = '', latestAction = '', stick = { x: 0, y: 0, active: false };
@@ -68,7 +68,7 @@ export function createUI({ client, audio, onViewChange = () => {} }) {
   $('.hud').insertAdjacentHTML('beforeend','<div class="resource-bank"><span>Wood <b id="wood">0</b></span><span>Gold <b id="gold">0</b></span></div><div id="aim-cancel" class="aim-cancel" hidden>×<small>Cancel</small></div>');
   $('.actions').outerHTML=`<div class="combat-controls"><button data-action="attack" class="combat-button attack" aria-label="Attack: hold Space or hold this button" title="Hold Space to attack. Release to stop."><kbd>Space</kbd>${icon('attack')}<span>Attack</span></button>${[1,2,3].map((slot,i)=>`<button data-action="ability" data-slot="${slot}" class="combat-button skill skill-${slot}" aria-label="Ability ${slot}"><kbd>${['Q','E','F'][i]}</kbd>${icon(`ability${slot}`)}<span class="skill-name">Skill ${slot}</span><b class="cooldown" hidden></b></button>`).join('')}</div><div class="utility-actions">${[['recall','Recall','R'],['regen','Regen','T']].map(([a,n,k])=>`<button data-action="${a}" class="combat-button"><kbd>${k}</kbd>${icon(a)}<span>${n}</span><b class="cooldown" hidden></b></button>`).join('')}</div><div class="economy-actions">${[['gather','Gather','C'],['build','Build','B']].map(([a,n,k])=>`<button data-action="${a}"><kbd>${k}</kbd>${icon(a)}<span>${n}</span></button>`).join('')}</div>`;
   $('#help-dialog ul').innerHTML='<li><span>Move / hold to attack</span><b>WASD / Space</b></li><li><span>Skills 1 / 2 / 3</span><b>Q / E / F</b></li><li><span>Recall / regenerate</span><b>R / T</b></li><li><span>Gather / build</span><b>C / B</b></li><li><span>Overview / grid</span><b>M / G</b></li>';
-  $('#help-dialog').querySelectorAll('p')[1].textContent='Hold the left joystick to move and the large Attack button to strike nearby enemies. Drag Dash to aim and release to strike through enemies. Tap Sprint for 3 seconds of speed; tap Shockwave to damage and push nearby enemies away. Drag to × to cancel a cast. Recall channels for 3 seconds; moving cancels it. Build and Gather are at the upper right. Your companion follows your orders. Push with your minions to bring down the enemy core.';
+  $('#help-dialog').querySelectorAll('p')[1].textContent='Hold the left joystick to move and the large Attack button to strike nearby enemies. Drag Dash to aim and release to strike through enemies. Tap Sprint for 3 seconds of speed; tap Shockwave to damage and push nearby enemies away. Drag to × to cancel a cast. Recall channels for 3 seconds; moving cancels it. Build and Gather are at the upper right. Companions follow the four order buttons, or a typed line parsed on this device.';
   const heroKit=[['Dash',3,'Dash through enemies for 180 damage. 8 second cooldown.'],['Sprint',0,'Move 50% faster for 3 seconds. 12 second cooldown.'],['Shockwave',3,'Deal 150 damage around you and push enemies back. 16 second cooldown.']];
   const skills={knight:heroKit,ranger:heroKit,lancer:heroKit};
   $('.hud').insertAdjacentHTML('beforeend','<div id="cast-status" class="cast-status" role="status" hidden><strong></strong><span></span><div class="cast-meter"><i></i></div></div>');
@@ -87,6 +87,35 @@ export function createUI({ client, audio, onViewChange = () => {} }) {
   root.querySelectorAll('[data-action]:not([data-action="attack"]):not([data-action="ability"])').forEach(b=>listen(b,'click',()=>action(b.dataset.action)));
   root.querySelectorAll('[data-order]').forEach(b=>listen(b,'click',()=>{client.command({type:'order',order:b.dataset.order});$('#orders').hidden=true;$('#companion-toggle').setAttribute('aria-expanded','false');}));
   listen($('#companion-toggle'),'click',()=>{$('#orders').hidden=!$('#orders').hidden;$('#companion-toggle').setAttribute('aria-expanded',String(!$('#orders').hidden));});
+  $('#companion-toggle').insertAdjacentHTML('afterend',`<form id="companion-command" class="companion-command"><label for="companion-line">Tell your squire</label><div class="companion-command-row"><input id="companion-line" name="line" maxlength="120" autocomplete="off" placeholder="come to me, go farm…"><button type="submit" id="companion-send">Say</button></div><small id="companion-needle-status">Needle loading…</small></form>`);
+  const needleStatus=$('#companion-needle-status'),needleLine=$('#companion-line'),needleSend=$('#companion-send');
+  const needleUnsub=companionNeedle?.subscribe(({status,error})=>{
+    needleStatus.textContent=status==='ready'?'Local Needle':status==='loading'?'Needle loading…':error||'Needle unavailable';
+    const blocked=status==='missing'||status==='error'||status==='unsupported';
+    needleLine.disabled=blocked;needleSend.disabled=blocked||status==='loading';
+  });
+  if(!companionNeedle){$('#companion-command').hidden=true;}
+  listen($('#companion-command'),'submit',async e=>{
+    e.preventDefault();
+    if(!currentSession||view.inputDisabled||!companionNeedle)return;
+    const query=needleLine.value.trim();
+    if(!query)return;
+    needleSend.disabled=true;
+    try{
+      const result=await companionNeedle.parse(query);
+      if(result.ok){
+        client.command(result.command);
+        needleLine.value='';
+        $('#orders').hidden=true;
+        $('#companion-toggle').setAttribute('aria-expanded','false');
+        message(`Order: ${result.command.order}`);
+      }else{
+        message(result.reason==='missing'?'Needle model missing. Run npm run fetch-needle.':result.reason==='not_ready'?'Needle is still loading.':"Didn't catch that.",result.reason==='missing'||result.reason==='not_ready');
+      }
+    }finally{
+      needleSend.disabled=needleLine.disabled;
+    }
+  });
   // A minimap gesture only inspects the camera; it must never issue a move.
   const mapButton=$('#map-button');let mapPointer=null,mapDragged=false;
   $('.hero-panel').insertAdjacentHTML('beforeend','<small id="combat-feedback" class="combat-feedback" role="status" hidden></small>');
@@ -169,5 +198,5 @@ export function createUI({ client, audio, onViewChange = () => {} }) {
     if(state.phase==='playing')resultShown=false;
     if(state.phase==='finished'&&!resultShown){resultShown=true;$('#result-title').textContent=hero?.team===state.winner?'The realm is yours.':'Your core has fallen.';$('#result-body').textContent=`${state.winner==='blue'?'Blue':'Red'} won in ${$('#clock').textContent}. Gathered ${hero?.gathered||0} resources, defeated ${hero?.kills||0} enemies.`;$('#results').showModal();}sync();
   };
-  setLoadState({});sync();return {getView:()=>view,update,setLoadState,setReady:ready=>setLoadState({playable:ready}),destroy:()=>{unsubscribeAudio();stopAll();clearInterval(movement);clearTimeout(messageTimer);listeners.forEach(fn=>fn());if(loadPanel)document.body.append(loadPanel);root.innerHTML='';}};
+  setLoadState({});sync();return {getView:()=>view,update,setLoadState,setReady:ready=>setLoadState({playable:ready}),destroy:()=>{needleUnsub?.();unsubscribeAudio();stopAll();clearInterval(movement);clearTimeout(messageTimer);listeners.forEach(fn=>fn());if(loadPanel)document.body.append(loadPanel);root.innerHTML='';}};
 }
