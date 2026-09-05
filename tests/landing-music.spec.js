@@ -6,13 +6,14 @@ const musicState = page => page.locator('#landing-music').evaluate(track => ({
 }));
 async function startMusic(page) {
   await page.goto('/');
-  await expect(page.locator('#landing-music-toggle')).toBeVisible();
+  await expect(page.locator('#landing-music')).toHaveCount(1);
+  await expect(page.locator('#landing-music-toggle')).toHaveCount(0);
   await page.keyboard.press('Shift');
   await expect.poll(async () => (await musicState(page)).paused).toBe(false);
   await expect.poll(async () => (await musicState(page)).time).toBeGreaterThan(0);
 }
 
-test('provided track plays, loops, and honors the landing mute control', async ({ page }) => {
+test('provided track plays and loops by default without a music button', async ({ page }) => {
   await startMusic(page);
   const state = await musicState(page);
   expect(state.loop).toBe(true);
@@ -20,12 +21,7 @@ test('provided track plays, loops, and honors the landing mute control', async (
   expect(state.volume).toBe(0.35);
   await page.locator('#landing-music').evaluate(track => { track.currentTime = track.duration - 0.2; });
   await expect.poll(async () => (await musicState(page)).time).toBeLessThan(3);
-  await page.getByRole('button', { name: 'Mute landing music' }).click();
-  await expect(page.locator('#landing-music-toggle')).toHaveText('Music off');
-  await page.keyboard.press('Shift');
-  expect((await musicState(page)).paused).toBe(true);
-  await page.getByRole('button', { name: 'Play landing music' }).click();
-  await expect.poll(async () => (await musicState(page)).paused).toBe(false);
+  await expect(page.getByRole('button', { name: /landing music|play music/i })).toHaveCount(0);
 });
 
 test('blocked autoplay recovers on a trusted gesture', async ({ page }) => {
@@ -41,11 +37,10 @@ test('blocked autoplay recovers on a trusted gesture', async ({ page }) => {
     };
   });
   await page.goto('/');
-  await expect(page.locator('#landing-music-toggle')).toHaveText('Play music');
-  await expect(page.locator('#landing-music-toggle')).toHaveAttribute('aria-pressed', 'true');
-  await page.keyboard.press('Shift');
+  await expect(page.locator('#landing-music')).toHaveCount(1);
+  await expect(page.locator('#landing-music-toggle')).toHaveCount(0);
+  await page.locator('input[name="name"]').click();
   await expect.poll(async () => (await musicState(page)).paused).toBe(false);
-  await expect(page.locator('#landing-music-toggle')).toHaveText('Music on');
 });
 
 test('rapid hide and return resumes despite an unsettled playback request', async ({ page }) => {
@@ -61,7 +56,7 @@ test('rapid hide and return resumes despite an unsettled playback request', asyn
     };
   });
   await page.goto('/');
-  await expect(page.locator('#landing-music-toggle')).toBeVisible();
+  await expect(page.locator('#landing-music')).toHaveCount(1);
   await page.keyboard.press('Shift');
   await page.evaluate(() => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: true });
@@ -73,7 +68,6 @@ test('rapid hide and return resumes despite an unsettled playback request', asyn
   });
   await expect.poll(async () => (await musicState(page)).paused).toBe(false);
   await expect.poll(async () => (await musicState(page)).time).toBeGreaterThan(0);
-  await expect(page.locator('#landing-music-toggle')).toHaveText('Music on');
 });
 
 for (const entry of ['quick-play', 'create-room', 'join']) {

@@ -1,10 +1,1 @@
-#landing-music-toggle {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-height: 44px; padding: 0 12px; margin: 0;
-  border: 1px solid #96744180; border-radius: 4px;
-  background: #081726e6; color: #e7c477;
-  font: 12px/1.4 system-ui, sans-serif; cursor: pointer;
-}
-#landing-music-toggle:hover { background: #193048; border-color: #e7c477; }
-#landing-music-toggle:focus-visible { outline: 2px solid #e7c477; outline-offset: 3px; }
 #landing-music { display: none; }
