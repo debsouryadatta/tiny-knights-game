@@ -2,6 +2,7 @@ import { createWorldAmbience } from './audio/ambience.js';
 import { createGameplayAudio } from './audio/gameplay.js';
 import { createAudioEngine } from './audio/engine.js';
 import { GameClient } from './network.ts';
+import { createCompanionNeedle } from './companion-needle.js';
 import './duel-lobby.css';
 import './combat-polish.css';
 import { createRenderer } from './renderer.js';
@@ -43,7 +44,8 @@ client.command = (command) => {
   renderer?.predictCommand?.(command);
   sendCommand(command);
 };
-const ui = createUI({ client, audio, onViewChange: () => {} });
+const companionNeedle = createCompanionNeedle();
+const ui = createUI({ client, audio, companionNeedle, onViewChange: () => {} });
 const refresh = () => {
   gameplayAudio.snapshot(
     client.state,
@@ -91,6 +93,7 @@ window.addEventListener('pagehide', () => {
   document.removeEventListener('pointerdown', unlockAudio);
   document.removeEventListener('keydown', unlockAudio);
   audio.destroy();
+  companionNeedle.destroy();
   client.disconnect();
 });
 window.addEventListener('pageshow', (event) => {
@@ -105,6 +108,7 @@ if (import.meta.hot)
     audio.destroy();
     clearInterval(mapTimer);
     unsubscribe();
+    companionNeedle.destroy();
     client.disconnect();
     ui.destroy();
     input.destroy();
@@ -135,6 +139,7 @@ window.realm = {
       phase: client.state?.phase,
       tick: client.state?.tick,
       renderer: renderer.getStats(),
+      needle: companionNeedle.getStatus(),
     };
   },
   walkable: (x, y) => isWalkable(Math.floor(x / TILE), Math.floor(y / TILE)),
