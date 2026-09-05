@@ -11,10 +11,11 @@ for(const [width,height] of sizes)test(`touch HUD has usable non-overlapping tar
   const page=await context.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   try{
-    await page.goto('http://localhost:4177/');
+    await page.goto(process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4177/');
     await page.waitForFunction(()=>window.realm?.state.ready);
     await page.locator('input[name="room"]').fill(`HUD${Date.now().toString(36)}`);
-    await page.locator('#join').click();
+    await page.locator('#create-room').click();
+    await page.locator('#lobby-start').click();
     await expect(page.locator('#join-screen')).toBeHidden();
     const boxes=await page.evaluate(selectors=>selectors.map(selector=>{
       const el=document.querySelector(selector),r=el.getBoundingClientRect();
@@ -55,7 +56,7 @@ for(const [width,height] of sizes)test(`touch HUD has usable non-overlapping tar
         expect(overlap,`${l.name} label overlaps ${selector}`).toBe(false);
       }
     }
-    await page.screenshot({path:`tests/responsive-controls-${width}x${height}.png`});
+    await page.screenshot({path:info.outputPath(`responsive-controls-${width}x${height}.png`)});
     expect(errors).toEqual([]);
   }finally{await context.close();}
 });

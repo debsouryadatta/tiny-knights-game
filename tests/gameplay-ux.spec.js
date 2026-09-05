@@ -5,7 +5,8 @@ async function join(page){
   await page.waitForFunction(()=>window.realm?.state.ready);
   await page.locator('input[name="name"]').fill('HUD tester');
   await page.locator('input[name="room"]').fill(`HUD${Date.now().toString(36)}`);
-  await page.locator('#join').click();
+  await page.locator('#create-room').click();
+  await page.locator('#lobby-start').click();
   await page.waitForFunction(()=>window.realm?.state.playerId&&window.realm.state.connected);
   await expect(page.locator('#join-screen')).toBeHidden();
 }
@@ -40,7 +41,7 @@ test('overview closes in one tap and minimap inspection never moves the hero',as
   await expect(page.locator('#return-hero')).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>window.realm.state.renderer.camera.x)).toBeGreaterThan(cameraBefore+20);
   expect(distance(initial,await position(page))).toBeLessThan(2);
-  await page.screenshot({path:`tests/gameplay-ux-${info.project.name}.png`});
+  await page.screenshot({path:info.outputPath('gameplay-ux.png')});
 });
 
 test('inspection recenters on movement and idle hero has no stale Moving toast',async({page},info)=>{

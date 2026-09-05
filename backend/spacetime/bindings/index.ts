@@ -35,15 +35,21 @@ import {
 
 // Import all reducer arg schemas
 import ControlCommandReducer from "./control_command_reducer";
+import EnterLobbyReducer from "./enter_lobby_reducer";
 import IssueCommandReducer from "./issue_command_reducer";
 import JoinMatchReducer from "./join_match_reducer";
+import LeaveLobbyReducer from "./leave_lobby_reducer";
+import LobbyReadyReducer from "./lobby_ready_reducer";
 import RestartMatchReducer from "./restart_match_reducer";
+import StartLobbyReducer from "./start_lobby_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import LobbyRosterRow from "./lobby_roster_table";
 import MatchStateRow from "./match_state_table";
 import MySessionRow from "./my_session_table";
+import RoomLobbyRow from "./room_lobby_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -60,6 +66,24 @@ const tablesSchema = __schema({
       { name: 'match_state_room_key', constraint: 'unique', columns: ['room'] },
     ],
   }, MatchStateRow),
+  roomLobby: __table({
+    name: 'room_lobby',
+    indexes: [
+      { accessor: 'room', name: 'room_lobby_room_idx_btree', algorithm: 'btree', columns: [
+        'room',
+      ] },
+    ],
+    constraints: [
+      { name: 'room_lobby_room_key', constraint: 'unique', columns: ['room'] },
+    ],
+  }, RoomLobbyRow),
+  lobbyRoster: __table({
+    name: 'lobby_roster',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, LobbyRosterRow),
   mySession: __table({
     name: 'my_session',
     indexes: [
@@ -72,9 +96,13 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("control_command", ControlCommandReducer),
+  __reducerSchema("enter_lobby", EnterLobbyReducer),
   __reducerSchema("issue_command", IssueCommandReducer),
   __reducerSchema("join_match", JoinMatchReducer),
+  __reducerSchema("leave_lobby", LeaveLobbyReducer),
+  __reducerSchema("lobby_ready", LobbyReadyReducer),
   __reducerSchema("restart_match", RestartMatchReducer),
+  __reducerSchema("start_lobby", StartLobbyReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
@@ -85,6 +113,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
   tables: typeof tablesSchema.schemaType.tables & {
     /** @deprecated Use `matchState` instead. This alias will be removed in the next major version. */
     readonly "match_state": Omit<typeof tablesSchema.schemaType.tables["matchState"], "accessorName"> & { readonly accessorName: "match_state" };
+    /** @deprecated Use `roomLobby` instead. This alias will be removed in the next major version. */
+    readonly "room_lobby": Omit<typeof tablesSchema.schemaType.tables["roomLobby"], "accessorName"> & { readonly accessorName: "room_lobby" };
   };
 };
 
@@ -104,6 +134,7 @@ const REMOTE_MODULE = {
 
 const tableAccessorAliases = {
   "match_state": "matchState",
+  "room_lobby": "roomLobby",
 } as const;
 
 function __withTableAccessorAliases<T extends object>(target: T, freeze = false): T {
@@ -126,12 +157,16 @@ type __DbViewBase = __DbConnectionImpl<typeof REMOTE_MODULE>["db"];
 export type DbView = __DbViewBase & {
   /** @deprecated Use `matchState` instead. This alias will be removed in the next major version. */
   readonly "match_state": __DbViewBase["matchState"];
+  /** @deprecated Use `roomLobby` instead. This alias will be removed in the next major version. */
+  readonly "room_lobby": __DbViewBase["roomLobby"];
 };
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
   /** @deprecated Use `matchState` instead. This alias will be removed in the next major version. */
   readonly "match_state": __TablesBase["matchState"];
+  /** @deprecated Use `roomLobby` instead. This alias will be removed in the next major version. */
+  readonly "room_lobby": __TablesBase["roomLobby"];
 };
 
 /** The tables available in this remote SpacetimeDB module. Each table reference doubles as a query builder. */

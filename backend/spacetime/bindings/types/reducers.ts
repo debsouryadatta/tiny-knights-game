@@ -7,12 +7,20 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import ControlCommandReducer from "../control_command_reducer";
+import EnterLobbyReducer from "../enter_lobby_reducer";
 import IssueCommandReducer from "../issue_command_reducer";
 import JoinMatchReducer from "../join_match_reducer";
+import LeaveLobbyReducer from "../leave_lobby_reducer";
+import LobbyReadyReducer from "../lobby_ready_reducer";
 import RestartMatchReducer from "../restart_match_reducer";
+import StartLobbyReducer from "../start_lobby_reducer";
 
 export type ControlCommandParams = __Infer<typeof ControlCommandReducer>;
+export type EnterLobbyParams = __Infer<typeof EnterLobbyReducer>;
 export type IssueCommandParams = __Infer<typeof IssueCommandReducer>;
 export type JoinMatchParams = __Infer<typeof JoinMatchReducer>;
+export type LeaveLobbyParams = __Infer<typeof LeaveLobbyReducer>;
+export type LobbyReadyParams = __Infer<typeof LobbyReadyReducer>;
 export type RestartMatchParams = __Infer<typeof RestartMatchReducer>;
+export type StartLobbyParams = __Infer<typeof StartLobbyReducer>;
 

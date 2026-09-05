@@ -1,5 +1,5 @@
 const canvas=document.querySelector('#game'),ctx=canvas.getContext('2d');
-const ROOT='/Tiny Swords (Free Pack)/';
+const ROOT='/assets/tiny-swords/';
 const files={grass:'Terrain/Tileset/Tilemap_color2.png',deepgrass:'Terrain/Tileset/Tilemap_color3.png',idle:'Units/Blue Units/Warrior/Warrior_Idle.png',run:'Units/Blue Units/Warrior/Warrior_Run.png',attack:'Units/Blue Units/Warrior/Warrior_Attack1.png',sheep:'Terrain/Resources/Meat/Sheep/Sheep_Idle.png',rock:'Terrain/Decorations/Rocks/Rock1.png'};
 for(let i=1;i<=4;i++){files['tree'+i]=`Terrain/Resources/Wood/Trees/Tree${i}.png`;files['bush'+i]=`Terrain/Decorations/Bushes/Bushe${i}.png`;}
 for(const b of ['House1','House2','House3','Castle','Tower','Monastery'])files[b]=`Buildings/Blue Buildings/${b}.png`;

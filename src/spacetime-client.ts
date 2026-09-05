@@ -12,6 +12,8 @@ export class SpacetimeGameClient {
   latency = 0;
   ping: {state:string;ms:number|null} = {state:'measuring',ms:null};
   pingSamples = 0;
+  lobby: {room:string;publicMatch:boolean;started:boolean;hostPlayerId:string;readyPlayers:string} | null = null;
+  roster: {playerId:string;online:boolean}[]=[];
   private stopPing: (() => void) | null = null;
   private connection: DbConnection | null = null;
   private listeners = new Set<() => void>();
@@ -23,9 +25,11 @@ export class SpacetimeGameClient {
   private emit() { for (const listener of this.listeners) listener(); }
   join(draft: Draft) {
     this.disconnect();
-    this.draft = { ...draft, room: (draft.room || Array.from(crypto.getRandomValues(new Uint8Array(3)),b=>b.toString(16).padStart(2,'0')).join('')).trim().toUpperCase() };
+    let resumeRoom:string|undefined;
+    try { if(draft.mode==='quick')resumeRoom=sessionStorage.getItem(sessionKey('quick-room'))||undefined; } catch {}
+    this.draft = { ...draft, room: (draft.room || resumeRoom || Array.from(crypto.getRandomValues(new Uint8Array(3)),b=>b.toString(16).padStart(2,'0')).join('')).trim().toUpperCase() };
     try { this.token = sessionStorage.getItem(sessionKey(this.draft.room)) ?? undefined; } catch { this.token = undefined; }
-    this.state = null; this.session = null; this.error = null; this.stopped = false;
+    this.state = null; this.session = null; this.lobby=null;this.roster=[]; this.error = null; this.stopped = false;
     this.connect();
   }
   private connect() {
@@ -36,18 +40,30 @@ export class SpacetimeGameClient {
       .onConnect((conn, _identity, token) => {
         if(this.stopped || this.connection !== conn){conn.disconnect();return;}
         this.token = token;
-        try { sessionStorage.setItem(sessionKey(draft.room!),token); } catch { /* Private browsing may disable storage. */ }
+        let subscribedRoom='';
+        const subscribeRoom=(room:string)=>{
+          if(subscribedRoom===room)return;subscribedRoom=room;
+          conn.subscriptionBuilder().onApplied(read).onError(ctx=>{if(this.stopped||this.connection!==conn)return;this.error=String(ctx.event);this.status='error';this.emit();}).subscribe([`SELECT * FROM match_state WHERE room = '${room.replace(/'/g,'')}'`,`SELECT * FROM room_lobby WHERE room = '${room.replace(/'/g,'')}'`]);
+        };
         const read = () => {
+          if(this.stopped||this.connection!==conn)return;
           const member = [...conn.db.mySession.iter()][0];
-          if (member) { this.session = { playerId: member.playerId, room: member.room, token }; this.status = 'connected'; }
+          if (member) { this.session = { playerId: member.playerId, room: member.room, token }; this.status = 'connected';draft.room=member.room;subscribeRoom(member.room);
+            try{sessionStorage.setItem(sessionKey(member.room),token);if(draft.mode==='quick')sessionStorage.setItem(sessionKey('quick-room'),member.room);}catch{}
+          }
+          this.lobby=conn.db.roomLobby.room.find(draft.room!)??null;
+          this.roster=[...conn.db.lobbyRoster.iter()];
           const row = conn.db.matchState.room.find(draft.room!);
           if (row) this.state = JSON.parse(row.snapshot) as GameState;
           this.emit();
         };
         conn.db.mySession.onInsert(read); conn.db.mySession.onUpdate(read);
         conn.db.matchState.onInsert(read); conn.db.matchState.onUpdate(read);
+        conn.db.roomLobby.onInsert(read);conn.db.roomLobby.onUpdate(read);conn.db.roomLobby.onDelete(read);
+        conn.db.lobbyRoster.onInsert(read);conn.db.lobbyRoster.onDelete(read);
         conn.subscriptionBuilder().onApplied(() => {
-          conn.reducers.joinMatch({ ...draft, room: draft.room! }).then(() => {
+          const args={room:draft.room!,name:draft.name,hero:draft.hero,companion:draft.companion,size:draft.size};
+          (draft.mode?conn.reducers.enterLobby({...args,mode:draft.mode}):conn.reducers.joinMatch(args)).then(() => {
             if(this.stopped||this.connection!==conn)return;
             this.error = null; read();
             this.stopPing?.();
@@ -61,11 +77,11 @@ export class SpacetimeGameClient {
                 this.ping=ping;if(ping.state==='ready')this.pingSamples++;this.emit();
               },
             });
-          }).catch(error => { this.error = String(error); this.status = 'error'; this.emit(); });
-        }).onError(ctx => { this.error = String(ctx.event); this.emit(); })
-          .subscribe([`SELECT * FROM match_state WHERE room = '${draft.room!.replace(/'/g, '')}'`, 'SELECT * FROM my_session']);
+          }).catch(error => { if(this.stopped||this.connection!==conn)return;this.error = String(error); this.status = 'error'; this.emit(); });
+        }).onError(ctx => { if(this.stopped||this.connection!==conn)return;this.error = String(ctx.event); this.status='error';this.emit(); })
+          .subscribe(['SELECT * FROM my_session','SELECT * FROM lobby_roster']);
       })
-      .onConnectError((_ctx, error) => { this.error = String(error); this.emit(); this.retry(); })
+      .onConnectError((_ctx, error) => { if(this.stopped||this.connection!==connection)return;this.error = String(error); this.emit(); this.retry(); })
       .onDisconnect(() => { if (this.connection === connection) this.retry(); })
       .build();
     this.connection = connection;
@@ -77,7 +93,7 @@ export class SpacetimeGameClient {
     this.reconnectTimer = setTimeout(() => { this.reconnectTimer = null; this.connect(); }, 1500);
   }
   command(command: Command) {
-    if (!this.connection || this.status !== 'connected') return;
+    if (!this.connection || this.status !== 'connected'||this.lobby?.started===false) return;
     const started = performance.now();
     this.connection.reducers.controlCommand({ payload: JSON.stringify(command) })
       .then(() => { this.latency = Math.round(performance.now() - started); if(command.type !== 'steer' && command.type !== 'move') this.error = null; this.emit(); })
@@ -86,6 +102,9 @@ export class SpacetimeGameClient {
   restart() {
     this.connection?.reducers.restartMatch({}).then(() => { this.error = null; this.emit(); }).catch(error => { this.error = String(error); this.emit(); });
   }
+  ready(ready:boolean){return this.connection?.reducers.lobbyReady({ready}).catch(error=>{this.error=String(error);this.emit();});}
+  start(){return this.connection?.reducers.startLobby({}).catch(error=>{this.error=String(error);this.emit();});}
+  async leave(){if(this.lobby&&!this.lobby.started)await this.connection?.reducers.leaveLobby({});try{if(this.draft?.mode==='quick')sessionStorage.removeItem(sessionKey('quick-room'));}catch{}this.disconnect();}
   disconnect() {
     this.stopped = true;
     this.stopPing?.();this.stopPing=null;this.ping={state:'measuring',ms:null};this.pingSamples=0;

@@ -29,7 +29,7 @@ export async function loadAssets(
             img.onerror = () =>
               finish(new Error('Could not load artwork: ' + file));
             img.decoding = 'async';
-            img.src = '/Tiny Swords (Free Pack)/' + file;
+            img.src = '/assets/tiny-swords/' + file;
           });
           if (!stopped()) images[key] = image;
         } catch (error) {

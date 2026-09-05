@@ -25,7 +25,7 @@ export class GameClient extends SpacetimeGameClient {
  }
  override command(command:Command){if(command.type==='order')this.manualOrderAt=Date.now();super.command(command);}
  private async plan(){
-  if(!this.plannerEnabled||this.plannerRequest||this.status!=='connected'||this.state?.phase!=='playing'||!this.session||Date.now()-this.manualOrderAt<60000)return;
+  if(!this.plannerEnabled||this.plannerRequest||this.status!=='connected'||this.state?.phase!=='playing'||this.lobby?.started===false||!this.session||Date.now()-this.manualOrderAt<60000)return;
   const state=this.state,session=this.session,generation=this.roundGeneration;
   const hero=state.actors.find(a=>a.id===session.playerId),companion=state.actors.find(a=>a.ownerId===session.playerId&&a.kind==='companion');
   if(!hero||!companion||hero.hp<=0||companion.hp<=0)return;

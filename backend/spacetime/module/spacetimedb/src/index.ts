@@ -1,5 +1,6 @@
 import { ScheduleAt } from 'spacetimedb';
 import { schema, table, t, SenderError } from 'spacetimedb/server';
+import type { ReducerCtx } from 'spacetimedb/server';
 import { createGame, addPlayer, applyCommand, stepGame } from '../../../../../shared/simulation';
 import type { Command, Draft, GameState } from '../../../../../shared/types';
 
@@ -10,14 +11,21 @@ const room_owner = table({}, { room: t.string().primaryKey(), identity: t.identi
 const connection = table({}, { id: t.connectionId().primaryKey(), identity: t.identity() });
 // Separate clocks keep a movement packet from suppressing the other thumb's action.
 const control_clock = table({}, { key: t.string().primaryKey(), sentAt: t.u64() });
-const db = schema({ match_state, membership, tick_timer, room_owner, connection, control_clock });
+const room_lobby = table({ public: true }, { room: t.string().primaryKey(), publicMatch: t.bool(), started: t.bool(), hostPlayerId: t.string(), readyPlayers: t.string() });
+const db = schema({ match_state, membership, tick_timer, room_owner, connection, control_clock, room_lobby });
 export default db;
 
 export const mySession = db.view({ public: true }, t.option(membership.rowType), ctx => ctx.db.membership.identity.find(ctx.sender) ?? undefined);
+export const lobbyRoster = db.view({public:true},t.array(t.object('LobbyMember',{playerId:t.string(),online:t.bool()})),ctx=>{
+  const member=ctx.db.membership.identity.find(ctx.sender);
+  if(!member)return [];
+  return [...ctx.db.membership.iter()].filter(m=>m.room===member.room).map(m=>({playerId:m.playerId,online:[...ctx.db.connection.iter()].some(c=>c.identity.equals(m.identity))}));
+});
 export const init = db.init(ctx => {
   ctx.db.tick_timer.insert({ scheduledId: 0n, scheduledAt: ScheduleAt.interval(100_000n) });
 });
-export const joinMatch = db.reducer({ room: t.string(), name: t.string(), hero: t.string(), companion: t.string(), size: t.u8() }, (ctx, args) => {
+const draftParams = { room: t.string(), name: t.string(), hero: t.string(), companion: t.string(), size: t.u8() };
+function joinRoom(ctx: ReducerCtx<typeof db.schemaType>, args: {room:string;name:string;hero:string;companion:string;size:number}) {
   args.room = args.room.trim().toUpperCase();
   if (!/^[a-zA-Z0-9-]{1,32}$/.test(args.room)) throw new SenderError('Invalid room code.');
   if (!['knight', 'ranger', 'lancer'].includes(args.hero)) throw new SenderError('Invalid hero.');
@@ -55,6 +63,62 @@ export const joinMatch = db.reducer({ room: t.string(), name: t.string(), hero: 
   if (row) ctx.db.match_state.room.update(next); else ctx.db.match_state.insert(next);
   if (!ctx.db.room_owner.room.find(args.room)) ctx.db.room_owner.insert({ room: args.room, identity: ctx.sender });
   ctx.db.membership.insert({ identity: ctx.sender, room: args.room, playerId, lastCommandMicros: 0n });
+}
+export const joinMatch = db.reducer(draftParams, joinRoom);
+export const enterLobby = db.reducer({ ...draftParams, mode: t.string() }, (ctx, args) => {
+  if (!['create','join','quick'].includes(args.mode)) throw new SenderError('Invalid lobby mode.');
+  const prior=ctx.db.membership.identity.find(ctx.sender);
+  if(prior){joinRoom(ctx,{...args,room:prior.room});return;}
+  let room=args.room.trim().toUpperCase();
+  if(args.mode==='quick') {
+    room='';
+    for(const lobby of ctx.db.room_lobby.iter()) {
+      if(!lobby.publicMatch||!lobby.started)continue;
+      const row=ctx.db.match_state.room.find(lobby.room);
+      if(!row)continue;
+      const state:GameState=JSON.parse(row.snapshot);
+      if(state.size===1&&state.phase==='playing'&&[...ctx.db.membership.iter()].filter(m=>m.room===lobby.room).length<2){room=lobby.room;break;}
+    }
+    if(!room)room=`Q${ctx.timestamp.microsSinceUnixEpoch.toString(36).toUpperCase()}${ctx.sender.toHexString().slice(-4).toUpperCase()}`;
+  }
+  const existing=ctx.db.match_state.room.find(room);
+  if(args.mode==='create'&&existing)throw new SenderError('Room code is already in use. Try again.');
+  if(args.mode==='join'&&!existing)throw new SenderError('Room not found. Check the code with your friend.');
+  joinRoom(ctx,{...args,room});
+  if(!ctx.db.room_lobby.room.find(room)) {
+    const member=ctx.db.membership.identity.find(ctx.sender)!;
+    ctx.db.room_lobby.insert({room,publicMatch:args.mode==='quick',started:args.mode!=='create',hostPlayerId:member.playerId,readyPlayers:'[]'});
+  }
+});
+export const lobbyReady = db.reducer({ ready:t.bool() },(ctx,args)=>{
+  const member=ctx.db.membership.identity.find(ctx.sender);
+  const lobby=member&&ctx.db.room_lobby.room.find(member.room);
+  if(!member||!lobby||lobby.started)throw new SenderError('No waiting lobby.');
+  const ready=new Set<string>(JSON.parse(lobby.readyPlayers));
+  if(args.ready)ready.add(member.playerId);else ready.delete(member.playerId);
+  ctx.db.room_lobby.room.update({...lobby,readyPlayers:JSON.stringify([...ready])});
+});
+export const startLobby = db.reducer(ctx=>{
+  const member=ctx.db.membership.identity.find(ctx.sender);
+  const lobby=member&&ctx.db.room_lobby.room.find(member.room);
+  if(!member||!lobby||lobby.started)throw new SenderError('No waiting lobby.');
+  if(lobby.hostPlayerId!==member.playerId)throw new SenderError('Only the host can start.');
+  const ready:string[]=JSON.parse(lobby.readyPlayers);
+  const guests=[...ctx.db.membership.iter()].filter(m=>m.room===member.room&&m.playerId!==member.playerId);
+  if(guests.some(m=>!ready.includes(m.playerId)))throw new SenderError('Wait for your friend to be ready.');
+  ctx.db.room_lobby.room.update({...lobby,started:true});
+});
+export const leaveLobby = db.reducer(ctx=>{
+  const member=ctx.db.membership.identity.find(ctx.sender);
+  const lobby=member&&ctx.db.room_lobby.room.find(member.room);
+  if(!member||!lobby||lobby.started)return;
+  ctx.db.membership.identity.delete(ctx.sender);
+  const row=ctx.db.match_state.room.find(member.room);
+  if(row){const state:GameState=JSON.parse(row.snapshot);const actor=state.actors.find(a=>a.id===member.playerId);if(actor)actor.bot=true;ctx.db.match_state.room.update({...row,snapshot:JSON.stringify(state),revision:row.revision+1});}
+  const remaining=[...ctx.db.membership.iter()].filter(m=>m.room===member.room);
+  if(!remaining.length){ctx.db.room_lobby.room.delete(member.room);ctx.db.match_state.room.delete(member.room);ctx.db.room_owner.room.delete(member.room);return;}
+  if(lobby.hostPlayerId===member.playerId){ctx.db.room_lobby.room.update({...lobby,hostPlayerId:remaining[0].playerId,readyPlayers:'[]'});ctx.db.room_owner.room.update({room:member.room,identity:remaining[0].identity});}
+  else ctx.db.room_lobby.room.update({...lobby,readyPlayers:JSON.stringify((JSON.parse(lobby.readyPlayers) as string[]).filter(id=>id!==member.playerId))});
 });
 export const onConnect = db.clientConnected(ctx => {
   if (ctx.connectionId) ctx.db.connection.insert({ id: ctx.connectionId, identity: ctx.sender });
@@ -67,7 +131,7 @@ export const onDisconnect = db.clientDisconnected(ctx => {
   if (!member || !row) return;
   const state: GameState = JSON.parse(row.snapshot);
   const actor = state.actors.find(a => a.id === member.playerId);
-  if (actor) actor.bot = true;
+  if (actor) {actor.bot = true;actor.attackHeld=false;actor.attackUntil=undefined;actor.attackTargetId=undefined;actor.steer=undefined;actor.target=undefined;}
   ctx.db.match_state.room.update({ ...row, snapshot: JSON.stringify(state), revision: row.revision + 1 });
 });
 export const restartMatch = db.reducer(ctx => {
@@ -96,6 +160,7 @@ export const restartMatch = db.reducer(ctx => {
 export const issueCommand = db.reducer({ type: t.string(), x: t.f64(), y: t.f64(), order: t.string() }, (ctx, args) => {
   const member = ctx.db.membership.identity.find(ctx.sender);
   if (!member) throw new SenderError('Join a match first.');
+  if(ctx.db.room_lobby.room.find(member.room)?.started===false)throw new SenderError('The host has not started the match.');
   if (ctx.timestamp.microsSinceUnixEpoch - member.lastCommandMicros < 30_000n) throw new SenderError('Commands sent too quickly.');
   if (!['move', 'gather', 'attack', 'ability', 'build', 'order', 'recall'].includes(args.type)) throw new SenderError('Invalid command.');
   if (!Number.isFinite(args.x) || !Number.isFinite(args.y)) throw new SenderError('Invalid coordinates.');
@@ -112,6 +177,7 @@ export const issueCommand = db.reducer({ type: t.string(), x: t.f64(), y: t.f64(
 export const controlCommand = db.reducer({ payload: t.string() }, (ctx, args) => {
   const member = ctx.db.membership.identity.find(ctx.sender);
   if (!member) throw new SenderError('Join a match first.');
+  if(ctx.db.room_lobby.room.find(member.room)?.started===false)throw new SenderError('The host has not started the match.');
   if (args.payload.length > 600) throw new SenderError('Control packet is too large.');
   let command: Command;
   try { command = JSON.parse(args.payload); } catch { throw new SenderError('Invalid control packet.'); }
@@ -165,7 +231,7 @@ export const tick = db.reducer({ onSchedule: tick_timer }, { timer: tick_timer.r
       }
       ctx.db.room_owner.room.delete(row.room);ctx.db.match_state.room.delete(row.room);continue;
     }
-    if (!activeRooms.has(row.room)) continue;
+    if (!activeRooms.has(row.room)||ctx.db.room_lobby.room.find(row.room)?.started===false) continue;
     const state: GameState = JSON.parse(row.snapshot);
     if (state.phase === 'finished') continue;
     stepGame(state, 0.1);

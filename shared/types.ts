@@ -5,6 +5,13 @@ export type Order = 'gather' | 'escort' | 'attack' | 'defend';
 export type ResourceKind = 'wood' | 'gold';
 export type Vec = { x: number; y: number };
 export interface Actor { sprintUntil?:number; }
+export interface Actor {
+  level?: number;
+  /** Cumulative kill XP, retained across death and reconnect. */
+  xp?: number;
+  buildChannel?: Vec & { originX: number; originY: number; until: number };
+  fountainHealing?: boolean;
+}
 export interface Actor { formationSlot?: 0 | 1 | 2; }
 export interface Effect { abilitySlot?:1|2|3; }
 export interface Effect {
@@ -25,7 +32,7 @@ export interface ResourceNode extends Vec { id: string; kind: ResourceKind; amou
 export interface Effect extends Vec { id: string; kind: 'hit' | 'heal' | 'gather' | 'build' | 'ability' | 'death' | 'recall' | 'respawn'; team: Team; ttl: number; target?: Vec; }
 export interface GameState { room: string; tick: number; elapsed: number; phase: 'playing' | 'finished'; winner?: Team; size: 1; actors: Actor[]; structures: Structure[]; resources: ResourceNode[]; bank: Record<Team, { wood: number; gold: number }>; effects: Effect[]; log: string[]; simulation?: {move:number;gather:number;ai:number;modes:Record<string,'move'|'gather'|'attack'|'idle'>;routes:Record<string,{goal:number;path:Vec[]}>;waypoints?:Record<string,number>}; }
 export type Command = { type: 'move'; x: number; y: number } | {type:'steer';x:number;y:number;seq?:number} | { type: 'gather' } | { type: 'attack';targetId?:string;held?:boolean } | { type: 'ability';slot?:1|2|3;x?:number;y?:number } | { type: 'build'; x: number; y: number } | { type: 'order'; order: Order } | { type: 'recall' } | {type:'regen'};
-export interface Draft { name: string; hero: HeroKind; companion: CompanionKind; size: 1; room?: string; }
+export interface Draft { name: string; hero: HeroKind; companion: CompanionKind; size: 1; room?: string; mode?: 'quick' | 'create' | 'join'; }
 export interface Session { playerId: string; room: string; token: string; }
 export type ClientMessage = { type: 'join'; draft: Draft; token?: string } | { type: 'command'; command: Command } | { type: 'restart' } | { type: 'ping'; at: number };
 export type ServerMessage = { type: 'welcome'; session: Session } | { type: 'state'; state: GameState } | { type: 'error'; message: string } | { type: 'pong'; at: number };

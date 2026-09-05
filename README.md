@@ -1,6 +1,8 @@
 # Little Realm · 1v1 Duel
 
-The main route is a strict 1v1 multiplayer duel built on the Canvas 2D engine and Tiny Swords sprites. Each side has one hero and one personal companion. Three-minion waves push the central lane toward the enemy core. Create a duel, then click the room code in the match to copy an invite link. Your friend takes the opposing bot's seat; a third player cannot join. Guardian and Scout escort by default, while Harvester gathers resources. Older 2v2/3v3 rooms cannot be joined; create a new duel.
+The main route is a strict 1v1 multiplayer duel built on the Canvas 2D engine and Tiny Swords sprites. Each side has one hero and one personal companion. Quick Play joins an available public match or starts one against a bot. Create Room opens a private waiting lobby with an invite code; your friend enters the code and readies up, then the host starts. The host can also start alone against a bot. A third player cannot join. Three-minion waves push the central lane toward the enemy core. Guardian and Scout escort by default, while Harvester gathers resources. Older 2v2/3v3 rooms cannot be joined; create a new duel.
+
+Heroes earn kill XP up to level 10, gaining health and basic-attack damage. Allied core and spawn fountains restore health without using Regen. Towers take 2.5 seconds to build, reserving their cost; movement or another action cancels construction and refunds it. The main attack button and Space become Gather near a resource unless an enemy is in attack range. C remains a dedicated Gather command.
 
 Play at [little-realm-duel.vercel.app](https://little-realm-duel.vercel.app). The Canvas/Vite frontend runs on Vercel and connects directly to the self-hosted `tiny-knights-prototype` database at `https://spacetime.tinkerers.space`. Caddy terminates TLS and forwards the SDK's secure WebSocket connection to SpacetimeDB. See [cloud deployment](design/cloud-deployment.md) for deployment commands and verification notes.
 
@@ -8,7 +10,7 @@ Run `npm install` then `npm run dev -- --port 4177`. Open http://localhost:4177.
 
 Current controls: WASD/arrows or joystick for continuous movement, hold Space/Attack to attack, Q/E/F for three skills, R recall, T regen, C gather, B tower placement, M overview, G grid, Escape cancel. Tap an enemy to target it. Drag a skill to aim and release to cast; drag toward Cancel to abort. Recall takes three seconds and movement or damage interrupts it. Landscape is recommended; fullscreen support varies by browser/OS.
 
-Click the music-note button to enable sound. The controls dialog has independent ambience and sound-effect volume sliders; muting preserves their values for the current page session. Seven Pixel Combat clips accompany footsteps, hits, abilities, gathering, and building. Synthesized river, forest, and base ambience follows the hero's position. Sound stops while the page is hidden, disconnected, or the hero is dead. This release includes ambience and effects, with no separate music track. Asset attribution and preparation notes are in `public/audio/README.md`.
+Sound is enabled by default and unlocks on the first click, tap, or keypress, as required by browsers. The music-note button mutes it. The controls dialog has independent ambience and sound-effect volume sliders; muting preserves their values for the current page session. Seven Pixel Combat clips accompany footsteps, hits, abilities, gathering, and building. Synthesized river, forest, and base ambience follows the hero's position. Sound stops while the page is hidden, disconnected, or the hero is dead. This release includes ambience and effects, with no separate music track. Asset attribution and preparation notes are in `public/assets/audio/README.md`.
 
 The top-right Ping indicator measures an application round trip over the live SpacetimeDB socket, including server response time. It uses a temporary read-only session subscription about every three seconds, even while idle. Green means under 100 ms, amber 100–199 ms, and red 200 ms or more. A three-second timeout shows `Ping >3s`; reconnecting hides the old measurement. This is not FPS, Vercel load time, or an ICMP network-only measurement.
 
@@ -56,7 +58,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. `npm run build` creates a distributable site in `dist`; `npm run preview` serves it locally. Keep the original `Tiny Swords (Free Pack)` directory in the project root: `public` links to it so Vite includes the supplied assets in production builds.
+Open the local URL printed by Vite. `npm run build` creates a distributable site in `dist`; `npm run preview` serves it locally. The supplied pack lives in `public/assets/tiny-swords`, alongside sound effects in `public/assets/audio`. Vite includes both folders in production builds.
 
 ## Controls
 

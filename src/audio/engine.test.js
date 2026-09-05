@@ -17,7 +17,8 @@ test('smooth attenuation is bounded and silent outside radius',()=>{
 test('gesture initialization, independent channels, mute, limits and disposal',async()=>{
  const {engine,context}=fixture({maxVoices:2});
  assert.equal(engine.getStats().initialized,false);assert.equal(engine.play('step'),false);
- await engine.toggle();await settle();assert.equal(engine.getStats().loaded,7);
+ assert.equal(engine.getStats().enabled,true);
+ await engine.unlock();await settle();assert.equal(engine.getStats().loaded,7);
  engine.setVolume('ambience',.1);assert.equal(engine.getStats().volumes.sfx,.65);
  assert.equal(engine.play('hit',{distance:13}),false);
  assert.equal(engine.play('step'),true);assert.equal(engine.play('step'),false);
@@ -27,15 +28,27 @@ test('gesture initialization, independent channels, mute, limits and disposal',a
 });
 test('unavailable audio and asset failures never escape',async()=>{
  const unavailable=fixture({contextFactory:()=>{throw Error('no audio');}}).engine;
- await unavailable.toggle();assert.equal(unavailable.getStats().enabled,false);assert.ok(unavailable.getStats().error);
+ await unavailable.unlock();assert.equal(unavailable.getStats().enabled,false);assert.ok(unavailable.getStats().error);
  const {engine}=fixture({fetcher:async()=>{throw Error('offline');}});
- await engine.toggle();await settle();assert.equal(engine.getStats().loaded,0);assert.equal(engine.play('hit'),false);engine.destroy();
+ await engine.unlock();await settle();assert.equal(engine.getStats().loaded,0);assert.equal(engine.play('hit'),false);engine.destroy();
  const rejected=fixture();rejected.context.resume=async()=>{throw Error('blocked');};
- await rejected.engine.toggle();assert.equal(rejected.engine.getStats().enabled,false);rejected.engine.destroy();
+ await rejected.engine.unlock();assert.equal(rejected.engine.getStats().enabled,false);rejected.engine.destroy();
 });
 test('deactivation removes loops and transient voices',async()=>{
- const {engine}=fixture();await engine.toggle();await settle();
+ const {engine}=fixture();await engine.unlock();await settle();
  engine.setLoop('river',()=>({}),.1);engine.play('hit');assert.equal(engine.getStats().voices,2);
  engine.setActive(false);assert.equal(engine.getStats().voices,0);assert.equal(engine.play('step'),false);
  engine.setActive(true);assert.equal(engine.getStats().voices,0);engine.destroy();
+});
+test('muting before or during the first gesture is never undone by subsequent gestures',async()=>{
+ const {engine,context}=fixture();
+ await engine.toggle();await engine.unlock();
+ assert.equal(engine.getStats().initialized,false);
+ let resumed;
+ context.resume=()=>new Promise(resolve=>{resumed=()=>{context.state='running';resolve();};});
+ const pending=engine.toggle();
+ await engine.toggle();resumed();await pending;await engine.unlock();
+ assert.equal(engine.getStats().enabled,false);
+ assert.equal(engine.play('step'),false);
+ engine.destroy();
 });

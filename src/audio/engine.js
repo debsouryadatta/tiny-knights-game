@@ -7,7 +7,7 @@ export function attenuation(distance, inner=2, outer=12) {
 }
 
 export function createAudioEngine({contextFactory=()=>new (globalThis.AudioContext||globalThis.webkitAudioContext)(), fetcher=globalThis.fetch, maxVoices=16}={}) {
-  let context, master, channels, enabled=false, active=true, disposed=false, busy=false, error=null;
+  let context, master, channels, enabled=true, active=true, disposed=false, busy=false, error=null;
   const volumes={ambience:.45,sfx:.65}, buffers=new Map(), voices=new Set(), loops=new Map(), cooldowns=new Map(), listeners=new Set();
   let played=0,dropped=0;
   const notify=()=>listeners.forEach(fn=>fn());
@@ -18,13 +18,15 @@ export function createAudioEngine({contextFactory=()=>new (globalThis.AudioConte
   async function load(){
     await Promise.all(Object.entries(sounds).map(async([key,spec])=>{
       if(buffers.has(key))return;
-      try{const response=await fetcher('/audio/'+encodeURIComponent(spec.file));if(!response.ok)throw new Error('Audio asset unavailable');
+      try{const response=await fetcher('/assets/audio/'+encodeURIComponent(spec.file));if(!response.ok)throw new Error('Audio asset unavailable');
         const buffer=await context.decodeAudioData(await response.arrayBuffer());if(!disposed)buffers.set(key,buffer);
       }catch{error='Some sound effects are unavailable.';}
     }));notify();
   }
-  async function toggle(){
-    if(disposed||busy)return;
+  // Called from a trusted pointer/key gesture. Enabled is the user's intent;
+  // unlocking never changes that intent, including during an in-flight resume.
+  async function unlock(){
+    if(disposed||busy||!enabled||context?.state==='running')return;
     busy=true;notify();
     try{
       if(!context){
@@ -32,11 +34,20 @@ export function createAudioEngine({contextFactory=()=>new (globalThis.AudioConte
         channels=Object.fromEntries(Object.entries(volumes).map(([key,value])=>{const node=context.createGain();node.gain.value=value;node.connect(master);return [key,node];}));
         context.onstatechange=notify;
       }
-      if(enabled){enabled=false;stopVoices();}
-      else{await context.resume();enabled=context.state==='running';if(!enabled)throw new Error('Audio resume rejected');error=null;void load();}
+      await context.resume();
+      if(disposed)return;
+      if(context.state!=='running')throw new Error('Audio resume rejected');
+      error=null;void load();
       mix();
     }catch{enabled=false;error='Sound is unavailable. Try enabling it again.';mix();}
     finally{busy=false;notify();}
+  }
+  async function toggle(){
+    if(disposed)return;
+    enabled=!enabled;
+    if(!enabled)stopVoices();
+    mix();notify();
+    if(enabled)await unlock();
   }
   function voice(buffer, channel, volume, rate=1, loop=false){
     const source=context.createBufferSource(),gain=context.createGain();
@@ -52,7 +63,7 @@ export function createAudioEngine({contextFactory=()=>new (globalThis.AudioConte
     cooldowns.set(key,context.currentTime+spec.cooldown);voice(buffer,'sfx',gain,rate);played++;return true;
   }
   return {
-    toggle, play,
+    toggle, unlock, play,
     setActive(value){if(active===value)return;active=value;if(!value)stopVoices();mix();notify();},
     setVolume(channel,value){if(!(channel in volumes)||!Number.isFinite(value))return;volumes[channel]=Math.max(0,Math.min(1,value));if(channels)ramp(channels[channel].gain,volumes[channel]);notify();},
     setLoop(key,createBuffer,gain){

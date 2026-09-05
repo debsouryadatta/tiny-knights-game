@@ -1,0 +1,118 @@
+/* Mobile layout reserves space for controls without shrinking their hit areas. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --hud-left: max(var(--hud-edge), var(--safe-left));
+  --hud-right: max(var(--hud-edge), var(--safe-right));
+  --hud-top: max(10px, var(--safe-top));
+  --hud-bottom: max(24px, var(--safe-bottom));
+}
+.hero-stack { display: contents; }
+.waiting-actions { display: grid; gap: 10px; }
+.waiting-actions #lobby-leave { margin-top: 0; }
+.draft-room { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.draft-room > label { min-width: 0; margin-bottom: 0; }
+.draft-room #join { width: auto; margin: 0; white-space: nowrap; }
+
+@media (pointer: coarse), (max-width: 700px) {
+  #ui .join-screen {
+    padding: max(14px, var(--safe-top)) max(18px, var(--safe-right)) max(14px, var(--safe-bottom)) max(18px, var(--safe-left));
+    scroll-padding-block: 16px;
+  }
+  #ui .join-screen input { min-height: 44px; font-size: 16px; }
+  #ui .join-screen button { min-height: 44px; }
+  #ui .close { width: 44px; height: 44px; }
+  #ui dialog button { min-height: 44px; }
+  #ui .audio-settings input { min-height: 44px; }
+  #ui .topbar { top: var(--safe-top); }
+  #ui .room-strip button { min-height: 44px; }
+  #ui dialog { width: min(440px, calc(100vw - var(--safe-left) - var(--safe-right) - 24px)); max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 24px); }
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  #ui .join-screen { align-items: flex-start; }
+  #ui #draft {
+    width: 100%; max-width: 840px; margin: auto; padding: 0;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: 'heading heroes' 'name companions' 'room actions' 'loading loading';
+    gap: 6px 24px;
+  }
+  #ui #draft .join-heading { grid-area: heading; }
+  #ui #draft .draft-name { grid-area: name; align-self: start; }
+  #ui #draft .draft-heroes { grid-area: heroes; }
+  #ui #draft .draft-companions { grid-area: companions; }
+  #ui #draft .draft-room { grid-area: room; align-self: end; }
+  #ui #draft .draft-actions { grid-area: actions; align-self: end; }
+  #ui #draft #loading { grid-area: loading; margin-top: 0; }
+  #ui #draft label, #ui #draft .legend { margin-top: 0; margin-bottom: 4px; }
+  #ui #draft .draft-room label { margin-bottom: 0; }
+  #ui #draft h1 { font-size: 28px; margin: 6px 0; }
+  #ui #draft .intro { font-size: 10px; line-height: 1.4; margin-bottom: 0; }
+  #ui #draft .choices button { padding: 2px 3px 5px; }
+  #ui #draft .choices { gap: 6px; }
+  #ui #draft .draft-sprite { height: 36px; background-position-y: -48px; }
+  #ui #draft .sprite-lancer { background-position-y: -18px; }
+  #ui #draft .choices button small { font-size: 8px; line-height: 1.2; }
+  #ui #draft input { padding-block: 8px; margin-top: 4px; }
+  #ui #draft .primary { margin-bottom: 0; padding-inline: 12px; letter-spacing: .8px; }
+  #ui #draft .lobby-entry-actions { margin-top: 0; gap: 8px; }
+  #ui #draft .join-footer { display: none; }
+
+  #ui .waiting-lobby {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    width: min(620px, 100%); max-width: none; margin: auto; padding: 16px;
+    gap: 8px 20px;
+  }
+  #ui .waiting-lobby > .legend { grid-column: 1; margin: 0; }
+  #ui .waiting-lobby h1 { grid-column: 1; margin: 0; font-size: 30px; }
+  #ui .waiting-lobby > p:first-of-type { grid-column: 1; font-size: 11px; }
+  #ui .waiting-lobby .lobby-code { grid-column: 1; margin: 0; padding: 8px; min-height: 48px; font-size: 22px; }
+  #ui .waiting-lobby .lobby-roster { grid-column: 2; grid-row: 1 / span 4; display: grid; grid-template-columns: 1fr; gap: 6px; margin: 0; }
+  #ui .waiting-lobby .lobby-seat { padding: 10px; }
+  #ui .waiting-lobby #lobby-status, #ui .waiting-lobby #lobby-error { grid-column: 1 / -1; font-size: 11px; margin: 0; }
+  #ui .waiting-lobby .waiting-actions { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #ui .waiting-actions button { margin: 0; min-height: 44px; }
+
+  #ui .hero-stack { display: flex; flex-direction: column; gap: 5px; position: absolute; left: calc(var(--hud-left) + var(--map-size) + 8px); top: var(--hud-top); width: 112px; }
+  #ui .hero-stack .hero-panel, #ui .hero-stack .companion { position: relative; left: auto; top: auto; bottom: auto; width: 100%; }
+  #ui .hero-stack .hero-panel { padding: 5px; }
+  #ui .hero-title { gap: 3px; flex-wrap: wrap; }
+  #ui .hero-title small { display: block; font-size: 8px; }
+  #ui .combat-feedback { font-size: 9px; line-height: 1.2; }
+  #ui .utility { gap: 4px; }
+  #ui .bank { position: absolute; left: calc(50% + 16px); transform: translateX(-50%); }
+  #ui .utility #ping-indicator { position: absolute; top: 52px; right: 0; font-size: 10px; }
+  #ui .room-strip { top: calc(var(--hud-top) + 82px); }
+  #ui .resource-bank { top: calc(var(--hud-top) + 132px); }
+  #ui .cast-status { top: calc(var(--hud-top) + 124px); width: 170px; padding: 6px 8px; }
+}
+
+@media (orientation: portrait) and (max-width: 600px) {
+  #ui #draft h1 { font-size: 38px; margin: 10px 0; }
+  #ui #draft .intro { margin-bottom: 8px; }
+  #ui #draft .draft-room #join { padding-inline: 12px; letter-spacing: .5px; }
+  #ui .hero-stack { display: flex; flex-direction: column; gap: 6px; position: absolute; left: var(--hud-left); top: calc(var(--hud-top) + var(--map-size) + 8px); width: 112px; }
+  #ui .hero-stack .hero-panel, #ui .hero-stack .companion { position: relative; top: auto; left: auto; bottom: auto; width: 100%; }
+  #ui .hero-title { flex-wrap: wrap; gap: 3px; }
+  #ui .hero-title small { display: block; font-size: 8px; }
+  #ui .utility #ping-indicator { position: absolute; top: 52px; right: 0; font-size: 10px; }
+  #ui .room-strip { top: calc(var(--hud-top) + 138px); }
+  #ui .resource-bank { top: calc(var(--hud-top) + 184px); }
+  #ui .economy-actions { top: calc(var(--hud-top) + 208px); }
+  #ui .cast-status { top: calc(var(--hud-top) + 274px); left: calc(var(--hud-left) + 124px); right: var(--hud-right); width: auto; transform: none; padding: 7px; }
+}
+@media (orientation: portrait) and (max-width: 600px) and (max-height: 680px) {
+  #ui .utility-actions { bottom: calc(var(--hud-bottom) + 145px); }
+  #ui .message { bottom: auto; top: calc(var(--hud-top) + 274px); left: calc(var(--hud-left) + 124px); right: var(--hud-right); transform: none; max-width: none; width: auto; padding: 7px; }
+  #ui .hud:has(.cast-status:not([hidden])) .message { display: none; }
+}
+/* A portrait phone's keyboard can make its visual viewport landscape-shaped. */
+@media (max-width: 400px) and (max-height: 540px) {
+  #ui #draft {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'heading' 'name' 'heroes' 'companions' 'room' 'actions' 'loading';
+    gap: 10px;
+  }
+}

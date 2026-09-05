@@ -8,19 +8,20 @@ async function openLobby(page) {
   await expect(page.getByRole('combobox', { name: /match size/i })).toHaveCount(0);
 }
 
-async function submitDraft(page, room, name) {
+async function submitDraft(page, room, name, create = false) {
   await openLobby(page);
   await page.locator('input[name="name"]').fill(name);
   await page.locator('input[name="room"]').fill(room);
-  await page.locator('#join').click();
+  await page.locator(create ? '#create-room' : '#join').click();
 }
 
-async function join(page, room, name) {
-  await submitDraft(page, room, name);
+async function join(page, room, name, create = false) {
+  await submitDraft(page, room, name, create);
   await page.waitForFunction(() => window.realm?.state.connected && window.realm.state.playerId);
+  if (create) await page.locator('#lobby-start').click();
   await expect(page.locator('#join-screen')).toBeHidden();
   await expect(page.locator('#hero-name')).toHaveText(name);
-  await expect.poll(() => page.evaluate(() => window.realm.state.room)).toBe(room);
+  if (!create) await expect.poll(() => page.evaluate(() => window.realm.state.room)).toBe(room);
   return page.evaluate(() => window.realm.state.playerId);
 }
 
@@ -47,8 +48,8 @@ test('same room admits two opposing players with one companion each and rejects 
     // Separate storage gives every player an independent server identity.
     for (let i = 0; i < 3; i++) contexts.push(await browser.newContext({ baseURL }));
     const [first, second, third] = await Promise.all(contexts.map(context => context.newPage()));
-    const room = `QA${Date.now().toString(36)}`.toUpperCase();
-    const firstId = await join(first, room, 'Duel One');
+    const firstId = await join(first, '', 'Duel One', true);
+    const room = await first.evaluate(() => window.realm.state.room);
     const secondId = await join(second, room, 'Duel Two');
     expect(secondId).not.toBe(firstId);
     const playerIds = [firstId, secondId].sort();

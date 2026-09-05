@@ -6,7 +6,7 @@ test('all shipped clips decode to finite non-silent audio without clipping',asyn
   const {sounds}=await import('/src/audio/config.js');
   const context=new OfflineAudioContext(1,44100,44100);
   return Promise.all(Object.entries(sounds).map(async([name,spec])=>{
-   const response=await fetch('/audio/'+encodeURIComponent(spec.file));
+   const response=await fetch('/assets/audio/'+encodeURIComponent(spec.file));
    if(!response.ok)throw new Error(`Missing clip: ${name}`);
    const buffer=await context.decodeAudioData(await response.arrayBuffer());
    const samples=buffer.getChannelData(0);
@@ -29,7 +29,7 @@ test('failed clip downloads report an error and keep mute usable',async({page})=
  await page.goto('/');
  await expect(page.locator('#sound')).toBeAttached();
  await page.evaluate(()=>{document.body.classList.remove('join-active');document.querySelector('#join-screen').remove();});
- await page.locator('#sound').click();
+ await page.keyboard.press('Shift');
  await expect.poll(()=>page.evaluate(()=>window.realm.audio.error)).toContain('unavailable');
  await page.locator('#sound').click();
  await expect(page.locator('#sound')).toHaveAttribute('aria-pressed','false');
@@ -39,10 +39,11 @@ test('audio initializes only on gesture; controls retain independent volumes',as
  await page.goto('/');
  await expect.poll(()=>page.evaluate(()=>!!window.realm)).toBe(true);
  expect(await page.evaluate(()=>window.realm.audio.initialized)).toBe(false);
+ expect(await page.evaluate(()=>window.realm.audio.enabled)).toBe(true);
  // Show the real match controls without requiring a running match server.
  await page.evaluate(()=>document.body.classList.remove('join-active'));
  await page.locator('#join-screen').evaluate(el=>el.remove());
- await page.locator('#sound').click();
+ await page.keyboard.press('Shift');
  await expect(page.locator('#sound')).toHaveAttribute('aria-pressed','true');
  await expect.poll(()=>page.evaluate(()=>window.realm.audio.loaded)).toBe(7);
  await page.locator('#help').click();
@@ -54,6 +55,8 @@ test('audio initializes only on gesture; controls retain independent volumes',as
  await expect(page.locator('#sound')).toHaveAttribute('aria-pressed','false');
  expect(await page.evaluate(()=>window.realm.audio.volumes)).toEqual({ambience:.2,sfx:.8});
  expect(await page.evaluate(()=>window.realm.audio.voices)).toBe(0);
+ await page.keyboard.press('Shift');
+ expect(await page.evaluate(()=>window.realm.audio.enabled)).toBe(false);
 });
 
 test('unavailable audio leaves controls usable without uncaught errors',async({page})=>{
@@ -61,10 +64,22 @@ test('unavailable audio leaves controls usable without uncaught errors',async({p
  await page.addInitScript(()=>{window.AudioContext=undefined;window.webkitAudioContext=undefined;});
  await page.goto('/');await expect(page.locator('#sound')).toBeAttached();
  await page.evaluate(()=>{document.body.classList.remove('join-active');document.querySelector('#join-screen').remove();});
- await page.locator('#sound').click();
+ await page.keyboard.press('Shift');
  await expect(page.locator('#sound')).toHaveAttribute('aria-pressed','false');
  expect(await page.evaluate(()=>window.realm.audio.error)).toContain('unavailable');
  expect(errors).toEqual([]);
+});
+
+test('first interaction can mute without a later gesture re-enabling audio',async({page})=>{
+ await page.goto('/');
+ await expect.poll(()=>page.evaluate(()=>!!window.realm)).toBe(true);
+ await page.evaluate(()=>{document.body.classList.remove('join-active');document.querySelector('#join-screen').remove();});
+ await page.locator('#sound').click();
+ await expect(page.locator('#sound')).toHaveAttribute('aria-pressed','false');
+ expect(await page.evaluate(()=>window.realm.audio.initialized)).toBe(false);
+ await page.keyboard.press('Shift');
+ expect(await page.evaluate(()=>window.realm.audio.initialized)).toBe(false);
+ expect(await page.evaluate(()=>window.realm.audio.enabled)).toBe(false);
 });
 
 test('real Web Audio follows hero proximity and deduplicates confirmed effects',async({page})=>{
@@ -76,7 +91,7 @@ test('real Web Audio follows hero proximity and deduplicates confirmed effects',
   const audio=createAudioEngine(),ambience=createWorldAmbience(audio),game=createGameplayAudio(audio,{onPosition:p=>ambience.update(p)});
   // Install a real user-gesture activation control for the isolated audio fixture.
   const button=document.createElement('button');button.id='audio-fixture';button.style.cssText='position:fixed;inset:0;z-index:99999';document.body.append(button);
-  window.audioFixture={audio,ambience,game};button.onclick=()=>audio.toggle();
+  window.audioFixture={audio,ambience,game};button.onclick=()=>audio.unlock();
   return true;
  });
  expect(result).toBe(true);await page.locator('#audio-fixture').click();
@@ -108,9 +123,9 @@ test('live match produces footsteps and confirmed ability audio',async({page},in
  test.skip(!process.env.AUDIO_LIVE_MATCH,'Requires a running match server');
  await page.goto('/');
  await page.locator('input[name="room"]').fill('SFX'+Date.now().toString(36));
- await page.locator('#join').click();
+ await page.locator('#create-room').click();
+ await page.locator('#lobby-start').click();
  await page.waitForFunction(()=>window.realm?.state.connected&&window.realm?.state.playerId);
- await page.locator('#sound').click();
  await expect.poll(()=>page.evaluate(()=>window.realm.audio.loaded)).toBe(7);
  const before=await page.evaluate(()=>window.realm.audio.played);
  if(info.project.name==='desktop'){

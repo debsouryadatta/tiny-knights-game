@@ -15,7 +15,8 @@ cuts = {
  'DSGNTonl_USABLE-Whimsy Coin_HY_PC.wav':(.48,1.5),
  'SWSH_MOVEMENT-Tiny Chime_HY_PC.wav':(.48,1.45),
 }
-destination=pathlib.Path(__file__).resolve().parents[1]/'public/audio'
+destination=pathlib.Path(__file__).resolve().parents[1]/'public/assets/audio'
+destination.mkdir(parents=True,exist_ok=True)
 for name,(start,end) in cuts.items():
  with wave.open(str(pathlib.Path(sys.argv[1])/name)) as source:
   rate=source.getframerate();source.setpos(int(start*rate))

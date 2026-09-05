@@ -12,6 +12,11 @@ import { WIDTH, HEIGHT, TILE, isWalkable } from '../shared/map.ts';
 const canvas = document.querySelector('#game');
 const client = new GameClient();
 const audio = createAudioEngine();
+const unlockAudio = (event) => {
+  if (event.isTrusted && !event.target?.closest?.('#sound')) audio.unlock();
+};
+document.addEventListener('pointerdown', unlockAudio);
+document.addEventListener('keydown', unlockAudio);
 const ambience = createWorldAmbience(audio);
 const gameplayAudio = createGameplayAudio(audio, {
   onPosition: (position) => ambience.update(position),
@@ -34,6 +39,7 @@ client.join = (draft) => {
 };
 const sendCommand = client.command.bind(client);
 client.command = (command) => {
+  if (client.lobby?.started === false) return;
   renderer?.predictCommand?.(command);
   sendCommand(command);
 };
@@ -82,6 +88,8 @@ renderer.ready
 window.addEventListener('pagehide', () => {
   disposed = true;
   document.removeEventListener('visibilitychange', visibility);
+  document.removeEventListener('pointerdown', unlockAudio);
+  document.removeEventListener('keydown', unlockAudio);
   audio.destroy();
   client.disconnect();
 });
@@ -92,6 +100,8 @@ if (import.meta.hot)
   import.meta.hot.dispose(() => {
     disposed = true;
     document.removeEventListener('visibilitychange', visibility);
+    document.removeEventListener('pointerdown', unlockAudio);
+    document.removeEventListener('keydown', unlockAudio);
     audio.destroy();
     clearInterval(mapTimer);
     unsubscribe();

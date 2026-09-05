@@ -1,8 +1,9 @@
-import { WORLD, files, bakeTerrain, drawObject, getVisibleObjects } from './world.js';
+import { WORLD, files, bakeTerrain, drawObject, getVisibleObjects, drawRiver } from './world.js';
 import { getMoveSpeed, moveContinuous } from '../shared/movement';
 import { loadAssets } from './asset-loader.js';
 import { createCombatEffects } from './combat-effects.js';
 import { spawnFor } from '../shared/map';
+import { advanceRunPhase } from './sprite-motion.js';
 
 const TILE = 64;
 const colors = { blue: '#79c9ff', red: '#ef7972' };
@@ -10,7 +11,13 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export function createRenderer(canvas, options) {
   const ctx = canvas.getContext('2d', { alpha: false });
-  const images = {}, tracks = new Map();
+  const images = {}, tracks = new Map(), actorsById=new Map();
+  const scenery=[],drawItems=[],drawPool=[],visibleActors=[];
+  const viewport={left:0,top:0,right:0,bottom:0};
+  function queueDraw(y,kind,subject,track){
+    const index=drawItems.length,item=drawPool[index]||(drawPool[index]={});
+    item.y=y;item.kind=kind;item.subject=subject;item.track=track;drawItems.push(item);
+  }
   const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const combatEffects=createCombatEffects({reducedMotion});
   let terrain, minimapBase, stopped = false, request = 0, last = 0, time = 0;
@@ -48,9 +55,9 @@ export function createRenderer(canvas, options) {
       manifest[`${team}-${kind}-Attack`] = `Units/${color} Units/${folder}/${folder}_${{knight:'Attack1',ranger:'Shoot',lancer:'Right_Attack',companion:'Interact Axe'}[kind]}.png`;
     }
     manifest[`${team}-tower`] = `Buildings/${color} Buildings/Tower.png`;
-    manifest[`${team}-core`] = `Buildings/${color} Buildings/Castle.png`;
+    manifest[`${team}-core`] = `Buildings/${color} Buildings/Monastery.png`;
   }
-  const criticalKey=key=>['grass','tree1','rock','rock2'].includes(key)||/^(blue|red)-.*-(Idle)$/.test(key)||/^(blue|red)-(tower|core)$/.test(key);
+  const criticalKey=key=>['grass','tree1','rock','rock2','blueBanner','redBanner'].includes(key)||/^(blue|red)-.*-(Idle)$/.test(key)||/^(blue|red)-(tower|core)$/.test(key);
   const critical=Object.entries(manifest).filter(([key])=>criticalKey(key));
   const optional=Object.entries(manifest).filter(([key])=>!criticalKey(key));
   const progress=(phase, counts, error)=>options.onLoadProgress?.({phase,...counts,playable,error});
@@ -165,7 +172,7 @@ export function createRenderer(canvas, options) {
       for (let i = 1; i < 4; i++) ctx.fillRect(-size / 2 + size * i / 4, 0, 1, 4);
       ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
       ctx.strokeStyle = '#102418'; ctx.lineWidth = 3;
-      const label = local ? 'YOU' : String(actor.name || 'Rival').slice(0, 16);
+      const label = `${local ? 'YOU' : String(actor.name || 'Rival').slice(0, 16)} · ${actor.level || 1}`;
       ctx.strokeText(label, 0, -6); ctx.fillStyle = local ? '#fff0b0' : '#fff5e5'; ctx.fillText(label, 0, -6);
 
     }
@@ -173,15 +180,23 @@ export function createRenderer(canvas, options) {
   }
   function structureSprite(s) {
     const image = images[`${s.team}-${s.kind}`], x = (s.x + .5) * TILE, y = (s.y + .5) * TILE;
-    const size = s.kind === 'core' ? 240 : 104;
+    const size = s.kind === 'core' ? 190 : 104;
     const spriteHeight = image ? size * image.height / image.width : 100;
     if (image) ctx.drawImage(image, x - size / 2, y - spriteHeight * .85, size, spriteHeight);
     else { ctx.fillStyle = colors[s.team]; ctx.fillRect(x - 22, y - 50, 44, 50); }
     bar(x, y - spriteHeight * .72, s.hp, s.maxHp, s.team, s.kind === 'core' ? 80 : 50);
-    if (s.kind === 'core') {
-      ctx.save(); ctx.shadowColor = colors[s.team]; ctx.shadowBlur = 15;
-      ctx.fillStyle = colors[s.team]; ctx.beginPath(); ctx.moveTo(x, y - 55); ctx.lineTo(x + 12, y - 32); ctx.lineTo(x, y - 15); ctx.lineTo(x - 12, y - 32); ctx.closePath(); ctx.fill(); ctx.restore();
-    }
+  }
+  function constructionSprite(actor,elapsed){
+    const build=actor.buildChannel;if(!build)return;
+    const x=(build.x+.5)*TILE,y=(build.y+.5)*TILE,image=images[`${actor.team}-tower`];
+    ctx.save();ctx.globalAlpha=.4;
+    if(image){const h=104*image.height/image.width;ctx.drawImage(image,x-52,y-h*.85,104,h);}
+    ctx.restore();ring(x,y,32,colors[actor.team],.85);
+    const remaining=Math.max(0,build.until-elapsed);
+    ctx.fillStyle='#152521';ctx.fillRect(x-35,y+22,70,7);
+    ctx.fillStyle=colors[actor.team];ctx.fillRect(x-34,y+23,68*clamp(1-remaining/2.5,0,1),5);
+    ctx.font='700 15px system-ui';ctx.textAlign='center';ctx.fillStyle='#fff3cf';
+    ctx.fillText(`Building ${remaining.toFixed(1)}s`,x,y-90);
   }
   function drawMap(target) {
     if (!target || !minimapBase) return;
@@ -218,7 +233,9 @@ export function createRenderer(canvas, options) {
       priorElapsed=state.elapsed;
       lastTick = state.tick;
       const active = new Set();
+      actorsById.clear();
       for (const a of state.actors) {
+        actorsById.set(a.id,a);
         active.add(a.id); const tx = (a.x + .5) * TILE, ty = (a.y + .5) * TILE;
         let t = tracks.get(a.id);
         if (!t) { t = { x: tx, y: ty, tx, ty, fromX:tx,fromY:ty,received:ms,hp:a.hp, face: a.team === 'blue' ? 1 : -1 }; tracks.set(a.id, t); }
@@ -279,9 +296,10 @@ export function createRenderer(canvas, options) {
     for (const [id,t] of tracks) {
       const priorX=t.x,priorY=t.y;
       const local=id===options.getPlayerId(), controlled=local&&prediction&&localInput.at&&(ms-localInput.at<350||!localInput.x&&!localInput.y);
-      if(controlled && state?.actors.find(a=>a.id===id)?.hp>0){
+      const actor=actorsById.get(id);
+      if(controlled && actor?.hp>0){
         const oldX=prediction.x,oldY=prediction.y;
-        const speed = getMoveSpeed(state.actors.find(a=>a.id===id), state.elapsed);
+        const speed = getMoveSpeed(actor, state.elapsed);
         moveContinuous(state,prediction,localInput.x*speed*dt,localInput.y*speed*dt);
         if(local){audioDistance=Math.hypot(prediction.x-oldX,prediction.y-oldY);audioMoving=!!(localInput.x||localInput.y);}
         const blend=1-Math.exp(-dt/.18);
@@ -301,7 +319,7 @@ export function createRenderer(canvas, options) {
         if(local){audioDistance=Math.hypot(t.x-priorX,t.y-priorY)/TILE;audioMoving=audioDistance>.002&&age<250;}
         if(local&&prediction){prediction.x=t.x/TILE-.5;prediction.y=t.y/TILE-.5;}
       }
-      t.runPhase=(t.runPhase||0)+(t.moving?dt*10:0);
+      t.runPhase=advanceRunPhase(t.runPhase||0,t.moving?Math.hypot(t.x-priorX,t.y-priorY):0,actor&&state?getMoveSpeed(actor,state.elapsed):0,dt);
       t.displayHp=(t.displayHp??t.hp)+(t.hp-(t.displayHp??t.hp))*(1-Math.exp(-dt/.2));
     }
     combatEffects.update(state,time,tracks);
@@ -324,7 +342,9 @@ export function createRenderer(canvas, options) {
     camera.x = hw >= WORLD.W / 2 ? WORLD.W / 2 : clamp(camera.x, hw, WORLD.W - hw);
     camera.y = hh >= WORLD.H / 2 ? WORLD.H / 2 : clamp(camera.y, hh, WORLD.H - hh);
     ctx.save(); ctx.translate(width / 2, height / 2); ctx.scale(scale, scale); ctx.translate(-camera.x, -camera.y);
-    const terrainReady = terrain.draw(ctx,{left:camera.x-hw,top:camera.y-hh,right:camera.x+hw,bottom:camera.y+hh},view.tactical);
+    viewport.left=camera.x-hw;viewport.top=camera.y-hh;viewport.right=camera.x+hw;viewport.bottom=camera.y+hh;
+    const terrainReady = terrain.draw(ctx,viewport,view.tactical);
+    if(!view.tactical)drawRiver(ctx,images,viewport,reducedMotion?0:time);
     if(view.tactical&&minimapBase)ctx.drawImage(minimapBase,0,0,WORLD.W,WORLD.H);
     if(me&&!view.tactical){
       const actor=state?.actors.find(a=>a.id===options.getPlayerId());
@@ -347,23 +367,31 @@ export function createRenderer(canvas, options) {
     }
     const bounds = { left: camera.x - hw - 160, top: camera.y - hh - 160, right: camera.x + hw + 160, bottom: camera.y + hh + 180 };
     combatEffects.drawGround(ctx,{bounds,scale,tactical:view.tactical});
-    const items = (view.tactical?[]:getVisibleObjects(bounds)).map(o => ({ y: o.y, render: () => drawObject(ctx, images, o, time) }));
-    const visibleActors = [];
+    drawItems.length=0;visibleActors.length=0;
+    if(!view.tactical)for(const o of getVisibleObjects(viewport,images,scenery))queueDraw(o.y,0,o);
     if (state) {
-      for (const s of state.structures) if (s.hp > 0) items.push({ y: (s.y + .5) * TILE, render: () => structureSprite(s) });
+      for (const s of state.structures) if (s.hp > 0) queueDraw((s.y+.5)*TILE,1,s);
       for (const a of state.actors) {
+        if(a.buildChannel&&a.hp>0)queueDraw((a.buildChannel.y+.5)*TILE,2,a);
         const t=tracks.get(a.id);
         if(t&&(a.hp>0||time-t.deadAt<1)&&t.x>=bounds.left&&t.x<=bounds.right&&t.y>=bounds.top&&t.y<=bounds.bottom){
-          items.push({y:t.y,render:()=>actorSprite(a,t,a.id===options.getPlayerId())});
-          if(a.hp>0)visibleActors.push([a,t]);
+          queueDraw(t.y,3,a,t);
+          if(a.hp>0)visibleActors.push(a,t);
+          if(a.fountainHealing&&a.hp>0)ring(t.x,t.y,35,'#9de9b4',.5);
         }
       }
     }
-    items.sort((a, b) => a.y - b.y); drawn = items.length; for (const item of items) item.render();
+    drawItems.sort((a,b)=>a.y-b.y);drawn=drawItems.length;
+    for(const item of drawItems){
+      if(item.kind===0)drawObject(ctx,images,item.subject,time);
+      else if(item.kind===1)structureSprite(item.subject);
+      else if(item.kind===2)constructionSprite(item.subject,state.elapsed);
+      else actorSprite(item.subject,item.track,item.subject.id===options.getPlayerId());
+    }
     combatEffects.drawOverlay(ctx,{bounds,scale,tactical:view.tactical});
     if (marker && time - marker.at < 1.5) ring((marker.x + .5) * TILE, (marker.y + .5) * TILE, 14 + (time - marker.at) * 8, '#fff0ad', 1 - (time - marker.at) / 1.5);
     if (view.buildMode && hover) { const x = (hover.x + .5) * TILE, y = (hover.y + .5) * TILE; ctx.fillStyle = '#f8d77c55'; ctx.fillRect(x - 32, y - 32, 64, 64); ring(x, y, TILE * 5, '#f3d080', .6); }
-    for (const [actor, track] of visibleActors) actorOverlay(actor, track, actor.id === options.getPlayerId());
+    for(let i=0;i<visibleActors.length;i+=2)actorOverlay(visibleActors[i],visibleActors[i+1],visibleActors[i].id===options.getPlayerId());
     ctx.restore();
     if(!playable && terrainReady)finishReady();
   }

@@ -1,12 +1,19 @@
 import { test, expect } from '@playwright/test';
 import { WIDTH, HEIGHT, baseFor, spawnFor, isWalkable, resourceSeeds, laneWaypoints } from '../shared/map.ts';
 
-async function join(page, room = `QA${Date.now().toString(36)}`) {
+async function join(page, room) {
   await page.goto('/');
   await page.waitForFunction(() => window.realm?.state.ready);
   await page.locator('input[name="name"]').fill('Playtester');
-  await page.locator('input[name="room"]').fill(room);
-  await page.locator('#join').click();
+  if(room){
+    await page.locator('input[name="room"]').fill(room);
+    await page.locator('#join').click();
+  }else{
+    await page.locator('#create-room').click();
+    await expect(page.locator('#waiting-lobby')).toBeVisible();
+    room=await page.locator('#lobby-copy').textContent();
+    await page.locator('#lobby-start').click();
+  }
   await page.waitForFunction(() => window.realm?.state.connected && window.realm.state.playerId);
   await expect(page.locator('#join-screen')).toBeHidden();
   return room;
@@ -53,11 +60,11 @@ test('draft, live input, overview, grid, companion orders and menu', async ({ pa
   await expect(page.locator('#help-dialog')).toBeVisible();
   await page.locator('#resume').click();
   await expect(page.locator('#help-dialog')).toBeHidden();
-  await page.screenshot({ path: `tests/new-realm-${info.project.name}.png` });
+  await page.screenshot({ path: info.outputPath('new-realm.png') });
   await page.locator('#map-button').click();
   await expect(page.locator('#tactical-hint')).toBeVisible();
   await page.waitForTimeout(600);
-  await page.screenshot({ path: `tests/new-realm-${info.project.name}-overview.png` });
+  await page.screenshot({ path: info.outputPath('new-realm-overview.png') });
   const destination = await page.evaluate(() => {
     const me = window.realm.match.actors.find(a => a.id === window.realm.state.playerId);
     for (const [dx, dy] of [[0,-3], [3,0], [-3,0], [0,3]]) {

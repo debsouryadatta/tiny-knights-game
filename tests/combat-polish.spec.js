@@ -4,7 +4,8 @@ test('Space attacks and recall and regen have live visual feedback',async({page}
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');
   await page.locator('input[name="room"]').fill(`FX${Date.now().toString(36)}`);
-  await page.locator('#join').click();
+  await page.locator('#create-room').click();
+  await page.locator('#lobby-start').click();
   await page.waitForFunction(()=>window.realm?.state.connected&&window.realm.state.playerId);
   await expect(page.locator('#join-screen')).toBeHidden();
   if(info.project.name==='desktop'){

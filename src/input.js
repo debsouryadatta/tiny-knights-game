@@ -1,11 +1,11 @@
 import { isWalkable } from '../shared/map';
+import { createMainActionHold, getMainAction } from './contextual-action.js';
 export function createInput(canvas, renderer, options) {
   const keys = new Set(),
     listeners = [];
   let press = null,
     vector = '',
-    lastSteer = 0,
-    attacking = false;
+    lastSteer = 0;
   const listen = (target, type, handler) => {
     target.addEventListener(type, handler);
     listeners.push(() => target.removeEventListener(type, handler));
@@ -17,14 +17,20 @@ export function createInput(canvas, renderer, options) {
   const send = (command) => {
     if (!disabled()) options.onCommand(command);
   };
+  const mainAction = createMainActionHold({
+    getAction: () => getMainAction(options.getState(), player()),
+    send: command => options.onCommand(command),
+  });
   function stop() {
+    const pointerId = press?.id;
+    press = null;
     if (vector && vector !== '0,0')
       options.onCommand({ type: 'steer', x: 0, y: 0 });
-    if (attacking) options.onCommand({ type: 'attack', held: false });
+    mainAction.release();
     keys.clear();
     vector = '';
-    attacking = false;
-    press = null;
+    if (pointerId != null && canvas.hasPointerCapture?.(pointerId))
+      canvas.releasePointerCapture(pointerId);
   }
   function steer() {
     const x =
@@ -73,8 +79,7 @@ export function createInput(canvas, renderer, options) {
     keys.add(key);
     if (!e.repeat) {
       if (key === ' ') {
-        attacking = true;
-        send({ type: 'attack', held: true });
+        mainAction.press();
       }
       if (['q', 'e', 'f'].includes(key))
         send({ type: 'ability', slot: ['q', 'e', 'f'].indexOf(key) + 1 });
@@ -86,13 +91,13 @@ export function createInput(canvas, renderer, options) {
   });
   listen(window, 'keyup', (e) => {
     keys.delete(e.key.toLowerCase());
-    if (e.key === ' ' && attacking) {
-      send({ type: 'attack', held: false });
-      attacking = false;
-    }
+    if (e.key === ' ') mainAction.release();
     steer();
   });
   listen(window, 'blur', stop);
+  listen(window, 'resize', stop);
+  listen(window, 'orientationchange', stop);
+  if (window.visualViewport) listen(window.visualViewport, 'resize', stop);
   listen(document, 'visibilitychange', () => {
     if (document.hidden) stop();
   });
@@ -113,7 +118,7 @@ export function createInput(canvas, renderer, options) {
     }
   });
   listen(canvas, 'pointerdown', (e) => {
-    if (disabled() || e.button > 2) return;
+    if (disabled() || e.button > 2 || press) return;
     const stats = renderer.getStats();
     press = {
       x: e.clientX,
@@ -162,7 +167,7 @@ export function createInput(canvas, renderer, options) {
       return;
     }
     steer();
-    if (attacking) send({ type: 'attack', held: true });
+    mainAction.update({ repeat: true });
   }, 100);
   return {
     destroy() {

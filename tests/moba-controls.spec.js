@@ -5,7 +5,8 @@ async function join(page) {
   await page.waitForFunction(() => window.realm?.state.ready);
   await page.locator('input[name="name"]').fill('Controls QA');
   await page.locator('input[name="room"]').fill(`MO${Date.now().toString(36)}`);
-  await page.locator('#join').click();
+  await page.locator('#create-room').click();
+  await page.locator('#lobby-start').click();
   await page.waitForFunction(() => window.realm?.state.connected && window.realm.state.playerId);
   await expect(page.locator('#join-screen')).toBeHidden();
 }
@@ -74,7 +75,7 @@ test('mobile multitouch keeps joystick and attack separate; minimap is upper lef
   const later=await hero(page);
   expect(Math.hypot(later.x-stopped.x,later.y-stopped.y)).toBeLessThan(.03);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.screenshot({path:`tests/moba-${info.project.name}.png`});
+  await page.screenshot({path:info.outputPath('moba.png')});
 });
 
 test('recall channels and movement cancels it',async({page},info)=>{
@@ -104,5 +105,5 @@ test('three separate skills cast and drag-to-cancel does not consume cooldown',a
     await page.locator(`[data-action="ability"][data-slot="${slot}"]`).click();
     await expect.poll(async()=>(await hero(page)).abilityCooldowns?.[slot-1]??0).toBeGreaterThan(0);
   }
-  await page.screenshot({path:'tests/moba-desktop.png'});
+  await page.screenshot({path:info.outputPath('moba-desktop.png')});
 });

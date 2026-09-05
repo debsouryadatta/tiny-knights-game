@@ -10,6 +10,7 @@ import type {
   Vec,
 } from "./types";
 import {canOccupy,moveContinuous,getMoveSpeed} from './movement';
+import {HERO_XP_THRESHOLDS,KILL_XP,heroLevel,heroMaxHp,BUILD_CHANNEL_SECONDS,FOUNTAIN_RADIUS,FOUNTAIN_HEAL_FRACTION} from './balance';
 import {HERO_HP,CREEP_HP,TOWER_DAMAGE,CORE_DAMAGE,SPAWN_PROTECTION,ABILITY_COOLDOWNS,DASH_DAMAGE,DASH_DISTANCE,SPRINT_DURATION,SHOCKWAVE_DAMAGE,SHOCKWAVE_RADIUS,SHOCKWAVE_PUSH,attackDamage,attackInterval} from './balance';
 import {
   WIDTH,
@@ -73,6 +74,7 @@ function effect(
   s.effects = s.effects.slice(-60);
 }
 function clearCombatControls(s: GameState, a: Actor) {
+  cancelBuild(s,a);
   a.target = undefined;
   a.steer = undefined;
   a.attackHeld = false;
@@ -136,6 +138,7 @@ function actor(
     abilityCooldown: 0,
     respawnAt: 0,
     kills: 0,
+    ...(!companion ? {level:1,xp:0} : {}),
     gathered: 0,
     lastAction: "Ready",
     lane: 1,
@@ -202,6 +205,7 @@ export function addPlayer(s: GameState, draft: Draft): string {
   const a = s.actors.find((a) => a.kind === "hero" && a.bot);
   if (!a) throw new Error("Match is full.");
   // A friend takes over the bot's slot at base with fresh controls and cooldowns.
+  cancelBuild(s,a);
   const fresh = actor(a.id, a.team, nearestFree(s, spawnFor(a.team, 0), a.id), draft.hero);
   s.actors[s.actors.indexOf(a)] = fresh;
   const m = memory(s);
@@ -250,6 +254,17 @@ function damage(
       target.respawnAt = s.elapsed + (target.kind === "hero" ? 10 : 7);
       clearCombatControls(s, target);
       if ("kills" in source) source.kills++;
+      if (source.kind === 'hero') {
+        source.xp = Math.min(HERO_XP_THRESHOLDS[HERO_XP_THRESHOLDS.length-1],(source.xp??0)+KILL_XP[target.kind]);
+        const level=heroLevel(source.xp);
+        if(level>(source.level??1)) {
+          const before=source.hp, oldMax=source.maxHp;
+          source.level=level;source.maxHp=heroMaxHp(source.hero,level);
+          source.hp=Math.min(source.maxHp,source.hp+source.maxHp-oldMax);
+          effect(s,source,'heal',source.team,undefined,{sourceId:source.id,targetId:source.id,amount:source.hp-before,style:'magic'});
+          log(s,`${source.name} reached level ${level}`);
+        }
+      }
       s.bank[source.team].gold += target.kind === "hero" ? 15 : 5;
       if (target.kind !== "creep")
         log(s, `${target.name} defeated · respawning`);
@@ -270,11 +285,29 @@ function enemies(s: GameState, a: Actor | Structure): (Actor | Structure)[] {
     ...s.structures.filter((b) => b.hp > 0 && b.team !== a.team),
   ].sort((b, c) => distance(a, b) - distance(a, c));
 }
+function cancelBuild(s:GameState,a:Actor) {
+  if(!a.buildChannel)return;
+  s.bank[a.team].wood+=TOWER_COST.wood;
+  s.bank[a.team].gold+=TOWER_COST.gold;
+  a.buildChannel=undefined;
+  a.lastAction='Build cancelled · refunded';
+}
+function completeBuild(s:GameState,a:Actor) {
+  const p=a.buildChannel!;
+  // An actor may have walked onto the reserved tile during the channel.
+  if(!free(s,p)) {cancelBuild(s,a);return;}
+  a.buildChannel=undefined;
+  s.structures.push({x:p.x,y:p.y,id:`tower-${s.tick}-${s.structures.length}`,team:a.team,kind:'tower',hp:500,maxHp:500,cooldown:.8});
+  effect(s,p,'build',a.team);
+  a.lastAction='Tower built';
+  log(s,`${a.name} built a tower`);
+}
 function build(
   s: GameState,
   a: Actor,
   p: Vec,
 ): { ok: boolean; error?: string } {
+  if(a.buildChannel)return {ok:false,error:'Already building a tower.'};
   if (!Number.isInteger(p.x) || !Number.isInteger(p.y) || !isWalkable(p.x, p.y))
     return { ok: false, error: "Choose a land tile." };
   if (distance(a, p) > 5)
@@ -282,7 +315,8 @@ function build(
   if (
     !free(s, p) ||
     s.resources.some((r) => distance(r, p) < 2) ||
-    s.structures.some((t) => t.hp > 0 && distance(t, p) < 4)
+    s.structures.some((t) => t.hp > 0 && distance(t, p) < 4) ||
+    s.actors.some((other)=>other.buildChannel&&distance(other.buildChannel,p)<4)
   )
     return {
       ok: false,
@@ -291,7 +325,7 @@ function build(
   if (
     s.structures.filter(
       (t) => t.team === a.team && t.kind === "tower" && t.hp > 0,
-    ).length >= 6
+    ).length + s.actors.filter(other=>other.team===a.team&&other.buildChannel).length >= 6
   )
     return { ok: false, error: "Your team has reached its 6 tower limit." };
   const b = s.bank[a.team];
@@ -299,17 +333,9 @@ function build(
     return { ok: false, error: "Tower costs 80 wood + 40 gold." };
   b.wood -= TOWER_COST.wood;
   b.gold -= TOWER_COST.gold;
-  s.structures.push({
-    ...p,
-    id: `tower-${s.tick}-${s.structures.length}`,
-    team: a.team,
-    kind: "tower",
-    hp: 500,
-    maxHp: 500,
-    cooldown: 0.8,
-  });
-  effect(s, p, "build", a.team);
-  log(s, `${a.name} built a tower`);
+  clearCombatControls(s,a);
+  a.buildChannel={x:p.x,y:p.y,originX:a.x,originY:a.y,until:s.elapsed+BUILD_CHANNEL_SECONDS};
+  a.lastAction='Building tower · 2.5 seconds';
   return { ok: true };
 }
 export function applyCommand(
@@ -328,6 +354,7 @@ export function applyCommand(
       if(c.seq!==undefined&&c.seq<=(a.inputSeq??-1))return {ok:true};
       if(c.seq!==undefined)a.inputSeq=c.seq;
       const length=Math.hypot(c.x,c.y),scale=1/Math.max(1,length);
+      if(length>.01)cancelBuild(s,a);
       a.steer={x:c.x*scale,y:c.y*scale,expiresAt:s.elapsed+.35};
       a.target=undefined;delete m.routes[id];m.modes[id]='idle';
       if(length>.01){a.recallUntil=undefined;a.lastAction='Moving';}
@@ -341,6 +368,7 @@ export function applyCommand(
       )
         return { ok: false, error: "That tile is not reachable land." };
       a.target = { x: c.x, y: c.y };
+      cancelBuild(s,a);
       a.steer=undefined;a.recallUntil=undefined;
       m.modes[id] = "move";
       delete m.routes[id];
@@ -348,6 +376,7 @@ export function applyCommand(
       break;
     }
     case "gather":
+      cancelBuild(s,a);
       a.steer=undefined;a.recallUntil=undefined;
       m.modes[id] = "gather";
       a.target = undefined;
@@ -355,6 +384,7 @@ export function applyCommand(
       break;
     case "attack":
       if((c.held!==undefined&&typeof c.held!=='boolean')||(c.targetId!==undefined&&typeof c.targetId!=='string'))return {ok:false,error:'Invalid attack input.'};
+      if(c.held!==false)cancelBuild(s,a);
       a.attackHeld=c.held===true;a.attackUntil=c.held===false?0:s.elapsed+1.2;
       if(c.held!==false)a.protectedUntil=0;
       a.attackTargetId=c.targetId;a.recallUntil=undefined;
@@ -385,11 +415,13 @@ export function applyCommand(
       break;
     }
     case "recall": {
+      cancelBuild(s,a);
       a.recallUntil=s.elapsed+3;a.target=undefined;a.steer=undefined;a.attackHeld=false;a.attackUntil=0;m.modes[id]='idle';delete m.routes[id];a.lastAction='Recalling · 3 seconds';
       break;
     }
     case 'regen': {
       if((a.regenCooldown??0)>0)return {ok:false,error:'Regen is cooling down.'};
+      cancelBuild(s,a);
       const before=a.hp;
       a.recallUntil=undefined;a.regenCooldown=30;a.hp=Math.min(a.maxHp,a.hp+a.maxHp*.3);
       effect(s,a,'heal',a.team,undefined,{sourceId:a.id,targetId:a.id,amount:a.hp-before,duration:1.2,style:'magic'});
@@ -401,6 +433,7 @@ export function applyCommand(
       a.abilityCooldowns??=[a.abilityCooldown,0,0];
       if (a.abilityCooldowns[slot-1] > 0)
         return { ok: false, error: "Ability is cooling down." };
+      cancelBuild(s,a);
       a.recallUntil=undefined;a.protectedUntil=0;a.abilityCooldowns[slot-1]=ABILITY_COOLDOWNS[slot-1];a.abilityCooldown=a.abilityCooldowns[0];
       const nearest=enemies(s,a)[0],aim={x:c.x??nearest?.x??a.x+(a.team==='blue'?1:-1),y:c.y??nearest?.y??a.y};
       const dx=aim.x-a.x,dy=aim.y-a.y,length=Math.hypot(dx,dy)||1,dir={x:dx/length,y:dy/length};
@@ -421,7 +454,7 @@ export function applyCommand(
         for(const e of enemies(s,a).filter(e=>distance(a,e)<=SHOCKWAVE_RADIUS)){
           const ex=e.x-a.x,ey=e.y-a.y,d=Math.hypot(ex,ey)||1;
           const applied = damage(s,a,e,SHOCKWAVE_DAMAGE,'magic');
-          if(applied>0&&'respawnAt' in e&&e.hp>0){moveContinuous(s,e,ex/d*SHOCKWAVE_PUSH,ey/d*SHOCKWAVE_PUSH);delete memory(s).routes[e.id];}
+          if(applied>0&&'respawnAt' in e&&e.hp>0){moveContinuous(s,e,ex/d*SHOCKWAVE_PUSH,ey/d*SHOCKWAVE_PUSH);if(e.buildChannel&&distance(e,{x:e.buildChannel.originX,y:e.buildChannel.originY})>.01)cancelBuild(s,e);delete memory(s).routes[e.id];}
         }
         a.lastAction='Shockwave';
       }
@@ -526,7 +559,11 @@ export function stepGame(s: GameState, dt: number): void {
   dt = Math.min(dt, 0.5);
   const m = memory(s);
   // Old persisted rooms keep their health fraction, including dead actors.
-  for(const a of s.actors)if(a.kind==='hero'&&a.maxHp!==HERO_HP[a.hero]){a.hp=a.hp/a.maxHp*HERO_HP[a.hero];a.maxHp=HERO_HP[a.hero];}
+  for(const a of s.actors)if(a.kind==='hero'){
+    a.xp??=0;a.level=heroLevel(a.xp);
+    const maxHp=heroMaxHp(a.hero,a.level);
+    if(a.maxHp!==maxHp){a.hp=a.hp/a.maxHp*maxHp;a.maxHp=maxHp;}
+  }
   s.elapsed += dt;
   s.tick++;
   m.move += dt;
@@ -582,7 +619,9 @@ export function stepGame(s: GameState, dt: number): void {
     a.cooldown = Math.max(0, a.cooldown - dt - 1e-9);
     a.abilityCooldowns=(a.abilityCooldowns??[a.abilityCooldown,0,0]).map(v=>Math.max(0,v-dt));a.abilityCooldown=a.abilityCooldowns[0];
     a.regenCooldown=Math.max(0,(a.regenCooldown??0)-dt);
+    a.fountainHealing=false;
     if (a.hp <= 0) {
+      cancelBuild(s,a);
       if (s.elapsed >= a.respawnAt) {
         Object.assign(a, nearestFree(s, spawnFor(a.team, a.lane * 2), a.id));
         a.hp = a.maxHp;
@@ -594,8 +633,16 @@ export function stepGame(s: GameState, dt: number): void {
       }
       continue;
     }
-    if (distance(a, baseFor(a.team)) < 5)
-      a.hp = Math.min(a.maxHp, a.hp + dt * 10);
+    if (a.kind!=='creep'&&a.hp<a.maxHp&&(distance(a,baseFor(a.team))<FOUNTAIN_RADIUS||distance(a,spawnFor(a.team,0))<FOUNTAIN_RADIUS)) {
+      const before=a.hp;
+      a.hp=Math.min(a.maxHp,a.hp+dt*a.maxHp*FOUNTAIN_HEAL_FRACTION);
+      a.fountainHealing=true;
+      if(!s.effects.some(e=>e.kind==='heal'&&e.targetId===a.id&&e.ttl>0))effect(s,a,'heal',a.team,undefined,{sourceId:a.id,targetId:a.id,amount:a.hp-before,duration:1,style:'magic'});
+    }
+    if(a.buildChannel){
+      if(distance(a,{x:a.buildChannel.originX,y:a.buildChannel.originY})>.01)cancelBuild(s,a);
+      else {if(s.elapsed+1e-9>=a.buildChannel.until)completeBuild(s,a);continue;}
+    }
     if(a.recallUntil){
       if(s.elapsed>=a.recallUntil){
         const origin={x:a.x,y:a.y};
@@ -655,6 +702,7 @@ export function stepGame(s: GameState, dt: number): void {
       }
       if (s.elapsed > 55 && s.elapsed % 45 > 15) mode = "attack";
     }
+    if(a.buildChannel)continue;
     if (mode === "gather") {
       const bank = s.bank[a.team];
       const preferred =
@@ -667,6 +715,7 @@ export function stepGame(s: GameState, dt: number): void {
               : "gold";
       const nodes = s.resources.filter((r) => r.amount > 0);
       const node =
+        (!a.bot&&a.kind==='hero'?nodes.filter(r=>distance(a,r)<=1.5).sort((b,c)=>distance(a,b)-distance(a,c))[0]:undefined) ??
         nodes
           .filter((r) => r.kind === preferred)
           .sort((b, c) => distance(a, b) - distance(a, c))[0] ??

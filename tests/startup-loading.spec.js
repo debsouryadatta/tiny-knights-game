@@ -7,7 +7,7 @@ const optionalArt = /(?:House1|Tree[234]|Bushe[1234]|_Run|_Attack1|_Shoot|_Right
 async function draft(page, name) {
   await page.locator('input[name="name"]').fill(name);
   await page.locator('input[name="room"]').fill(room());
-  await page.locator('#join').click();
+  await page.locator('#create-room').click();
 }
 
 test('native progress is visible before the game module arrives', async ({ page }) => {
@@ -36,6 +36,7 @@ test('optional artwork does not block entering a live match', async ({ page }) =
     expect(progress.value).toBeLessThan(progress.max);
     await draft(page, 'Optional QA');
     await page.waitForFunction(() => window.realm?.state.connected && window.realm.state.playerId);
+    await page.locator('#lobby-start').click();
     await expect(page.locator('#join-screen')).toBeHidden();
     const tick = await page.evaluate(() => window.realm.state.tick);
     await expect.poll(() => page.evaluate(() => window.realm.state.tick)).toBeGreaterThan(tick);
@@ -60,6 +61,8 @@ test('early draft submission queues once without spawning before essential art',
     expect(connections).toBe(0);
   } finally { release(); }
   await page.waitForFunction(() => window.realm?.state.connected && window.realm.state.playerId);
+  await expect(page.locator('#lobby-roster')).toContainText('Queued QA');
+  await page.locator('#lobby-start').click();
   await expect(page.locator('#hero-name')).toHaveText('Queued QA');
   await page.waitForTimeout(350);
   expect(connections).toBe(1);

@@ -16,6 +16,10 @@ test('command-only snapshots do not delay interpolation or extend its stopping t
       let lastTick=0;const samples=[];
       const start=performance.now();
       await new Promise(resolve=>{
+        // Asset readiness can register this sampler between the two renderers'
+        // RAF callbacks. Update snapshots and compare only after both callbacks
+        // complete, so the fixture compares identical presentation timestamps.
+        const queueSample=()=>requestAnimationFrame(now=>setTimeout(()=>sample(now),0));
         function sample(now){
           const elapsed=now-start,tick=Math.floor(elapsed/100);
           if(tick!==lastTick){
@@ -27,8 +31,8 @@ test('command-only snapshots do not delay interpolation or extend its stopping t
           }
           const a=baseline.getStats().rendered,b=duplicate.getStats().rendered;
           if(a&&b&&elapsed>250)samples.push({at:elapsed,difference:Math.hypot(a.x-b.x,a.y-b.y),x:b.x});
-          if(elapsed>=1300)resolve();else requestAnimationFrame(sample);
-        }requestAnimationFrame(sample);
+          if(elapsed>=1300)resolve();else queueSample();
+        }queueSample();
       });
       return {samples,maxDifference:Math.max(...samples.map(s=>s.difference)),stopRange:Math.max(...samples.filter(s=>s.at>1100).map(s=>s.x))-Math.min(...samples.filter(s=>s.at>1100).map(s=>s.x))};
     }finally{baseline.destroy();duplicate.destroy();canvases.forEach(c=>c.remove());}

@@ -1,7 +1,7 @@
 // Draw in world-pixel space, inside the renderer's camera transform.
 // update() must run every frame after track interpolation. Network at/duration
 // use seconds; x/y and target use tiles; tracks use pixels at the actor's feet.
-// drawGround/drawOverlay accept { bounds?: {left,top,right,bottom}, tactical? }.
+// drawGround/drawOverlay accept { bounds?: {left,top,right,bottom}, tactical?, scale? }.
 const TAU = Math.PI * 2;
 const TILE = 64;
 const clamp = (n, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, n));
@@ -252,6 +252,9 @@ export function createCombatEffects(options = {}) {
   }
   function draw(ctx, view, painter) {
     let count = 0;
+    // World-space labels must remain readable when the mobile camera zooms out.
+    const scale = finite(view.scale) && view.scale > 0 ? view.scale : 1;
+    const labelSize = Math.max(17, 12 / scale);
     ctx.save();
     try {
       ctx.globalCompositeOperation = 'source-over'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -263,7 +266,7 @@ export function createCombatEffects(options = {}) {
         painter(ctx, e, p, age); count++;
         if(painter===overlay&&e.amount>0&&(e.kind==='hit'||e.kind==='heal')){
           ctx.save();ctx.globalAlpha=Math.min(1,p/.08)*(1-p);
-          ctx.font='700 17px system-ui';ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='#102030';
+          ctx.font=`700 ${labelSize}px system-ui`;ctx.textAlign='center';ctx.lineWidth=labelSize*3/17;ctx.strokeStyle='#102030';
           ctx.fillStyle=e.kind==='heal'?palette.heal:palette.white;
           const label=`${e.kind==='heal'?'+':'−'}${e.amount}`,y=e.y-66-(reducedMotion?0:ease(p)*23);
           ctx.strokeText(label,e.x,y);ctx.fillText(label,e.x,y);ctx.restore();

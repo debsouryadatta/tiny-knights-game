@@ -22,6 +22,15 @@ export const ControlClock = __t.object("ControlClock", {
 });
 export type ControlClock = __Infer<typeof ControlClock>;
 
+export const LobbyMember = __t.object("LobbyMember", {
+  playerId: __t.string(),
+  online: __t.bool(),
+});
+export type LobbyMember = __Infer<typeof LobbyMember>;
+
+export const LobbyRoster = __t.object("LobbyRoster", {});
+export type LobbyRoster = __Infer<typeof LobbyRoster>;
+
 export const MatchState = __t.object("MatchState", {
   room: __t.string(),
   snapshot: __t.string(),
@@ -39,6 +48,15 @@ export type Membership = __Infer<typeof Membership>;
 
 export const MySession = __t.object("MySession", {});
 export type MySession = __Infer<typeof MySession>;
+
+export const RoomLobby = __t.object("RoomLobby", {
+  room: __t.string(),
+  publicMatch: __t.bool(),
+  started: __t.bool(),
+  hostPlayerId: __t.string(),
+  readyPlayers: __t.string(),
+});
+export type RoomLobby = __Infer<typeof RoomLobby>;
 
 export const RoomOwner = __t.object("RoomOwner", {
   room: __t.string(),

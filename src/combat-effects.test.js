@@ -92,3 +92,27 @@ test('every effect draws finite deterministic geometry, respects culling and res
     assert.equal(fx.getStats().overlayDrawn, 0);
   }
 });
+
+test('combat labels keep a 12px screen minimum on mobile with proportionate outlines', () => {
+  for (const reducedMotion of [false, true]) {
+    const fx = createCombatEffects({ reducedMotion });
+    const snapshot = state([event('damage', 'hit', { amount: 42 }), event('health', 'heal', { amount: 24 })]);
+    fx.update(snapshot, 10); fx.update(snapshot, 10.15);
+    for (const scale of [.5, .61, 1, 1.3, undefined, NaN, 0]) {
+      const ctx = context(), labels = [];
+      ctx.strokeText = (label) => labels.push({ label, font: ctx.font, outline: ctx.lineWidth });
+      fx.drawOverlay(ctx, { scale });
+      const effectiveScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+      const expectedSize = Math.max(17, 12 / effectiveScale);
+      assert.deepEqual(labels.map(label => label.label), ['−42', '+24']);
+      for (const label of labels) {
+        assert.equal(label.font, `700 ${expectedSize}px system-ui`);
+        assert.ok(expectedSize * effectiveScale >= 12);
+        assert.equal(label.outline, expectedSize * 3 / 17);
+      }
+      assert.equal(ctx.lineWidth, 7);
+    }
+    fx.update(state(), 12);
+    assert.equal(fx.getStats().active, 0);
+  }
+});

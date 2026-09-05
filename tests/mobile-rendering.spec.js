@@ -16,7 +16,8 @@ test('terrain and minimap survive a 2048px canvas limit and context recovery',as
   await page.goto('/');
   await page.waitForFunction(()=>window.realm?.state.ready);
   await page.locator('input[name="room"]').fill(`MEM${Date.now().toString(36)}`);
-  await page.locator('#join').click();
+  await page.locator('#create-room').click();
+  await page.locator('#lobby-start').click();
   await page.waitForFunction(()=>window.realm?.state.connected&&window.realm.state.playerId);
   await expect.poll(()=>page.evaluate(()=>window.realm.state.renderer.terrainChunks)).toBeGreaterThan(0);
   expect(await page.evaluate(()=>window.realm.state.renderer.terrainChunks)).toBeLessThanOrEqual(12);
@@ -33,20 +34,22 @@ test('terrain and minimap survive a 2048px canvas limit and context recovery',as
   await page.evaluate(()=>document.querySelector('#game').dispatchEvent(new Event('contextrestored')));
   await expect.poll(()=>page.evaluate(()=>window.realm.state.ready)).toBe(true);
   await expect.poll(colored).toBeGreaterThan(500);
-  await page.screenshot({path:'tests/mobile-rendering-verified.png'});
+  await page.screenshot({path:info.outputPath('mobile-rendering-verified.png')});
   expect(errors).toEqual([]);
 });
 
 test('public tunnel serves the chunk renderer and a colored mobile battlefield',async({browser},info)=>{
   test.skip(info.project.name!=='mobile-landscape');
+  test.skip(!process.env.PLAYWRIGHT_TUNNEL_URL,'Set PLAYWRIGHT_TUNNEL_URL to exercise an active public tunnel.');
   const context=await browser.newContext({viewport:{width:844,height:390},isMobile:true,hasTouch:true,extraHTTPHeaders:{'ngrok-skip-browser-warning':'true'}});
   const page=await context.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   try{
-    await page.goto('https://tops-still-basilisk.ngrok-free.app/');
+    await page.goto(process.env.PLAYWRIGHT_TUNNEL_URL);
     await page.waitForFunction(()=>window.realm?.state.ready,undefined,{timeout:30000});
     await page.locator('input[name="room"]').fill(`TUN${Date.now().toString(36)}`);
-    await page.locator('#join').click();
+    await page.locator('#create-room').click();
+    await page.locator('#lobby-start').click();
     await page.waitForFunction(()=>window.realm?.state.connected&&window.realm.state.playerId);
     await expect.poll(()=>page.evaluate(()=>window.realm.state.renderer.terrainChunks)).toBeGreaterThan(0);
     expect(await page.evaluate(()=>window.realm.state.renderer.terrainChunks)).toBeLessThanOrEqual(12);
@@ -56,7 +59,7 @@ test('public tunnel serves the chunk renderer and a colored mobile battlefield',
       return colored/(p.length/4);
     });
     expect(colored).toBeGreaterThan(.2);
-    await page.screenshot({path:'tests/mobile-tunnel-rendering-verified.png'});
+    await page.screenshot({path:info.outputPath('mobile-tunnel-rendering-verified.png')});
     expect(errors).toEqual([]);
   }finally{await context.close();}
 });
