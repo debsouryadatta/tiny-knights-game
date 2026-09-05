@@ -126,6 +126,9 @@ test('live match produces footsteps and confirmed ability audio',async({page},in
  await page.locator('#create-room').click();
  await page.locator('#lobby-start').click();
  await page.waitForFunction(()=>window.realm?.state.connected&&window.realm?.state.playerId);
+ // Connection and player identity already exist in the waiting lobby. Wait for
+ // the authoritative start snapshot before sending movement to the game.
+ await expect(page.locator('#join-screen')).toBeHidden();
  await expect.poll(()=>page.evaluate(()=>window.realm.audio.loaded)).toBe(7);
  const before=await page.evaluate(()=>window.realm.audio.played);
  if(info.project.name==='desktop'){

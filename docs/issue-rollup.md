@@ -19,6 +19,32 @@ All 436 supplied art/audio files moved unchanged to `public/assets/tiny-swords` 
 
 ## Verification
 
+### Item-by-item recheck — 5 September 2026
+
+The current deployed game at https://little-realm-duel.vercel.app was rechecked against all eight open source issues. No gameplay defect was found in this pass. Two browser suites were added to cover previously untested UI paths, and the live audio test now waits for the authoritative match-start snapshot before sending movement.
+
+| Request | Fresh evidence |
+| --- | --- |
+| #3 proximity audio | 21 local browser checks including live playback across three viewports, plus 3 production checks; default gesture unlock, mute, independent volumes, falloff and actual event playback |
+| #4 pack visuals | River animation and shrine captures at desktop/landscape; pixel-identical scenery culling; unit coverage for tree clearance |
+| #13 Quick Play | Production join/resume browser check and live SDK public pairing, full-room rollover and private exclusion |
+| #15 levels | Real simulation + UI fixture verifies creep/hero/bot XP, visible level growth and snapshot round-trip on all three viewports; unit tests cover cap and stat growth |
+| #16 fountain | Real simulation + UI fixture verifies healing/status/effects, leaving the fountain and independent Regen; unit tests cover both allied locations and enemy exclusion |
+| #17 tower channel | Real simulation + UI/renderer fixture verifies reservation, ghost/countdown, cancellation/refund and one completed tower; unit tests cover movement, death, invalid placement and limits |
+| #18/#19 contextual action | 6 desktop/landscape checks run actual UI, keyboard input and simulation: labels, harvest, damage, dedicated Gather, range/death transitions and no automatic action |
+| Private lobby addition | Production two-browser create/code/ready/start/reconnect flow; live SDK waiting freeze, guards, host transfer and departure |
+| Asset-folder addition | 428 Tiny Swords files plus 7 WAV effects and attribution README under `public/assets`; no runtime legacy paths |
+| Default music/audio addition | Existing ambience and effects default on after the first gesture. A separate background music track is **not implemented**; clarification requested |
+| Mobile/animation | Production checks at six sizes, production WebKit smoke, four multitouch/cancellation checks and three motion regressions; desktop/landscape screenshots inspected |
+
+Fresh totals: **102 unit tests, 59 browser checks and both live SDK suites passed**, plus a successful production build. Four inapplicable duplicate visual/motion cases were skipped. The added progression and contextual suites use deterministic local fixtures, not a remote database; they complement rather than replace the live transport suites. Audio checks establish decoded samples and playback events, not subjective listening quality. Physical-phone performance remains unverified.
+
+New focused suites:
+
+```sh
+PLAYWRIGHT_BASE_URL=http://localhost:4180 npx playwright test tests/issue-progression.spec.js tests/contextual-e2e.spec.js
+```
+
 Validated 102 unit tests, both real-SDK integration suites, seven lobby browser checks, 32 gameplay browser checks, 37 audio/loading/ping checks, and desktop/landscape visual captures. Viewport-specific duplicates and the optional external tunnel test are skipped where inapplicable. Supplied audio was decoded and checked for finite, non-silent samples and live event playback; this is not a subjective listening review.
 
 ```sh
