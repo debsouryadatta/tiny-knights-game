@@ -1,0 +1,46 @@
+#match-intro {
+  position: fixed; inset: 0; box-sizing: border-box; margin: 0;
+  width: 100%; height: 100%; height: 100dvh; max-width: none; max-height: none;
+  padding: 0; border: 0; border-radius: 0; color: #f4edda;
+  background: linear-gradient(90deg, #061321f5 0%, #061321cc 42%, #06132122 100%), url('/art/duel-lobby.png') center / cover;
+  font-family: system-ui, sans-serif; overflow: auto;
+}
+#match-intro::backdrop { background: #061321; }
+#match-intro .intro-shell { min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding: max(28px, env(safe-area-inset-top)) max(40px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(40px, env(safe-area-inset-left)); }
+#match-intro .intro-brand { font-size: 12px; font-weight: 800; letter-spacing: 3px; color: #edc77d; }
+#match-intro .intro-brand span { margin-left: 20px; font-size: 10px; font-weight: 500; color: #c4d2db; letter-spacing: 2px; }
+#match-intro .intro-mission { margin: auto 0; padding: 30px 0; }
+#match-intro .intro-eyebrow { color: #e6be70; font-size: 11px; letter-spacing: 3px; margin: 0 0 14px; }
+#match-intro h1 { font: 600 clamp(44px, 6vw, 80px)/.98 Georgia, serif; letter-spacing: -2px; margin: 0 0 22px; outline: none; }
+#match-intro #intro-objective { font-size: clamp(19px, 2vw, 26px); line-height: 1.5; margin: 0; }
+#match-intro #intro-objective strong { color: #edc77d; font-weight: 600; }
+#match-intro .intro-fineprint { font-size: 12px; color: #becbd3; margin: 12px 0 0; }
+#match-intro .intro-footer { width: min(100%, 520px); padding-top: 18px; border-top: 1px solid #d9b87966; }
+#match-intro .intro-tip-heading, #match-intro .intro-timing { display: flex; justify-content: space-between; gap: 16px; }
+#match-intro .intro-tip-heading { font-size: 10px; letter-spacing: 1.7px; color: #edc77d; }
+#match-intro .intro-order-hint { font-size: 12px; color: #becbd3; margin: 10px 0 14px; }
+#match-intro #intro-tip { min-height: 64px; }
+#match-intro #intro-tip strong { font-size: 18px; font-weight: 600; }
+#match-intro #intro-tip p { font-size: 14px; line-height: 1.5; margin: 5px 0 12px; }
+#match-intro .intro-segments { display: flex; gap: 6px; margin-top: 12px; }
+#match-intro .intro-segments i { flex: 1; height: 3px; background: #edf3f82b; overflow: hidden; }
+#match-intro .intro-segments i::after { content: ''; display: block; height: 100%; background: #edc77d; transform-origin: left; transform: scaleX(var(--fill, 0)); }
+#match-intro .intro-timing { font-size: 11px; color: #becbd3; margin: 10px 0 0; }
+@media (max-width: 600px) {
+  #match-intro { background-image: linear-gradient(#061321aa, #061321f5 62%), url('/art/duel-lobby.png'); background-position: 65% center; }
+  #match-intro .intro-shell { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+  #match-intro .intro-brand span { display: block; margin: 8px 0 0; }
+  #match-intro #intro-tip { min-height: 86px; }
+}
+@media (max-height: 500px) and (min-width: 601px) {
+  #match-intro { background-image: linear-gradient(0deg, #061321e8, #06132133), linear-gradient(90deg, #061321e8, transparent), url('/art/duel-lobby.png'); }
+  #match-intro .intro-shell { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; padding-top: max(20px, env(safe-area-inset-top)); padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+  #match-intro .intro-brand { grid-column: 1 / -1; }
+  #match-intro .intro-mission { padding: 22px 0 0; }
+  #match-intro h1 { font-size: 46px; margin-bottom: 14px; }
+  #match-intro #intro-objective { font-size: 19px; }
+  #match-intro .intro-footer { align-self: end; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #match-intro .intro-segments i::after { transform: none; opacity: var(--fill, 0); }
+}

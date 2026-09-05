@@ -1,3 +1,4 @@
+import { createMatchIntro } from './match-intro.js';
 import { createWorldAmbience } from './audio/ambience.js';
 import { createGameplayAudio } from './audio/gameplay.js';
 import { createAudioEngine } from './audio/engine.js';
@@ -28,12 +29,16 @@ const gameplayAudio = createGameplayAudio(audio, {
 let renderer;
 let disposed = false,
   queuedJoin = null;
+const matchIntro = createMatchIntro();
 const joinMatch = client.join.bind(client);
 client.join = (draft) => {
   if (queuedJoin) return queuedJoin;
   queuedJoin = (async () => {
     await renderer.ready;
     if (disposed)
+      throw new Error('Game closed before joining. Please reopen it.');
+    const completed = await matchIntro.show();
+    if (!completed || disposed)
       throw new Error('Game closed before joining. Please reopen it.');
     return joinMatch(draft);
   })().finally(() => {
@@ -101,6 +106,7 @@ renderer.ready
   });
 window.addEventListener('pagehide', () => {
   disposed = true;
+  matchIntro.destroy();
   document.removeEventListener('visibilitychange', visibility);
   document.removeEventListener('pointerdown', unlockAudio);
   document.removeEventListener('touchend', unlockAudio);
@@ -115,6 +121,7 @@ if (import.meta.hot)
   import.meta.hot.dispose(() => {
     stopGameplayGestures();
     disposed = true;
+    matchIntro.destroy();
     document.removeEventListener('visibilitychange', visibility);
     document.removeEventListener('pointerdown', unlockAudio);
     document.removeEventListener('touchend', unlockAudio);
