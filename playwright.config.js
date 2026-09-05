@@ -9,7 +9,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:4177',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4177',
     headless: true,
     launchOptions: { executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' },
     trace: 'retain-on-failure',
