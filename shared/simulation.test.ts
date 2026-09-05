@@ -160,6 +160,21 @@ test("invalid destinations and unaffordable towers do not mutate resources", () 
   assert.equal(s.structures.length, 2);
   assert.deepEqual(s.bank.blue, { wood: 0, gold: 0 });
 });
+test("gather_wood and gather_gold orders stay on that resource", () => {
+  for (const [order, kind, other] of [
+    ["gather_wood", "wood", "gold"],
+    ["gather_gold", "gold", "wood"],
+  ] as const) {
+    const s = createGame("ores", 1),
+      id = addPlayer(s, draft);
+    assert.equal(applyCommand(s, id, { type: "order", order }).ok, true);
+    assert.equal(s.actors.find((a) => a.ownerId === id)!.order, order);
+    for (const node of s.resources) if (node.kind === other) node.amount = 0;
+    run(s, 40);
+    assert.ok(s.bank.blue[kind] > 0, order);
+    assert.equal(s.bank.blue[other], 0, order);
+  }
+});
 test("gather command gathers into the shared bank; companions follow orders", () => {
   const s = createGame("test", 1),
     id = addPlayer(s, draft);

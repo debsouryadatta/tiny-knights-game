@@ -402,7 +402,7 @@ export function applyCommand(
       return build(s, a, c);
     case "order": {
       if (
-        !(["gather", "escort", "attack", "defend"] as Order[]).includes(c.order)
+        !(["gather", "gather_wood", "gather_gold", "escort", "attack", "defend"] as Order[]).includes(c.order)
       )
         return { ok: false, error: "Unknown order." };
       const agent = s.actors.find((x) => x.ownerId === id);
@@ -658,7 +658,7 @@ export function stepGame(s: GameState, dt: number): void {
     let mode = m.modes[a.id] ?? (a.bot ? "gather" : "idle");
     if (a.kind === "companion") {
       mode =
-        a.order === "gather"
+        a.order === "gather" || a.order === "gather_wood" || a.order === "gather_gold"
           ? "gather"
           : a.order === "attack"
             ? "attack"
@@ -705,21 +705,30 @@ export function stepGame(s: GameState, dt: number): void {
     if(a.buildChannel)continue;
     if (mode === "gather") {
       const bank = s.bank[a.team];
+      const locked =
+        a.kind === "companion" && a.order === "gather_wood"
+          ? "wood"
+          : a.kind === "companion" && a.order === "gather_gold"
+            ? "gold"
+            : undefined;
       const preferred =
-        bank.wood < TOWER_COST.wood
+        locked ??
+        (bank.wood < TOWER_COST.wood
           ? "wood"
           : bank.gold < TOWER_COST.gold
             ? "gold"
             : bank.wood < bank.gold * 2
               ? "wood"
-              : "gold";
+              : "gold");
       const nodes = s.resources.filter((r) => r.amount > 0);
+      const preferredNodes = nodes.filter((r) => r.kind === preferred);
       const node =
-        (!a.bot&&a.kind==='hero'?nodes.filter(r=>distance(a,r)<=1.5).sort((b,c)=>distance(a,b)-distance(a,c))[0]:undefined) ??
-        nodes
-          .filter((r) => r.kind === preferred)
-          .sort((b, c) => distance(a, b) - distance(a, c))[0] ??
-        nodes.sort((b, c) => distance(a, b) - distance(a, c))[0];
+        (!a.bot && a.kind === "hero"
+          ? nodes.filter((r) => distance(a, r) <= 1.5).sort((b, c) => distance(a, b) - distance(a, c))[0]
+          : undefined) ??
+        (locked ? preferredNodes : preferredNodes.length ? preferredNodes : nodes).sort(
+          (b, c) => distance(a, b) - distance(a, c),
+        )[0];
       if (node) {
         a.target =
           distance(a, node) > 1.5 ? { x: node.x, y: node.y } : undefined;

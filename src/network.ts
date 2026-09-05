@@ -37,7 +37,7 @@ export class GameClient extends SpacetimeGameClient {
    const result=await response.json();
    if(this.session?.token!==session.token||this.session?.room!==session.room||this.session?.playerId!==session.playerId||Date.now()-this.manualOrderAt<60000)return;
    if(generation!==this.roundGeneration||this.state?.phase!=='playing'||this.state.elapsed<state.elapsed||!this.state.actors.some(a=>a.id===session.playerId&&a.hp>0))return;
-   if(result.mode==='llm'&&['gather','escort','attack','defend'].includes(result.order)){this.plannerMode='llm';super.command({type:'order',order:result.order});}
+   if(result.mode==='llm'&&['gather','gather_wood','gather_gold','escort','attack','defend'].includes(result.order)){this.plannerMode='llm';super.command({type:'order',order:result.order});}
    else this.plannerMode='deterministic';
   }catch{this.plannerMode='deterministic';}
   finally{clearTimeout(timeout);if(this.plannerRequest===controller)this.plannerRequest=null;}
