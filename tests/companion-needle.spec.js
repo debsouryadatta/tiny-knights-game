@@ -3,7 +3,8 @@ import { test, expect } from '@playwright/test';
 async function join(page, room = `QA${Date.now().toString(36)}`) {
   await page.addInitScript(() => {
     window.__companionNeedleParse = async (query) => {
-      if (/farm|gather|wood|gold/i.test(query)) return { ok: true, command: { type: 'order', order: 'gather' } };
+      if (/gold/i.test(query)) return { ok: true, command: { type: 'order', order: 'gather_gold' } };
+      if (/farm|gather|wood/i.test(query)) return { ok: true, command: { type: 'order', order: 'gather_wood' } };
       if (/stay|escort|follow/i.test(query)) return { ok: true, command: { type: 'order', order: 'escort' } };
       return { ok: false, reason: 'empty' };
     };
@@ -30,11 +31,18 @@ test('typed companion line issues the matching standing order', async ({ page })
   await page.locator('#companion-send').click();
   await expect.poll(() =>
     page.evaluate(() => window.realm.match.actors.find(a => a.ownerId === window.realm.state.playerId && a.kind === 'companion')?.order),
-  ).toBe('gather');
+  ).toBe('gather_wood');
+  await expect(page.locator('[data-order="gather_wood"]')).toHaveClass(/active/);
+  await page.locator('#companion-line').fill('get gold');
+  await page.locator('#companion-send').click();
+  await expect.poll(() =>
+    page.evaluate(() => window.realm.match.actors.find(a => a.ownerId === window.realm.state.playerId && a.kind === 'companion')?.order),
+  ).toBe('gather_gold');
+  await expect(page.locator('[data-order="gather_gold"]')).toHaveClass(/active/);
   await page.locator('#companion-line').fill("what's the meta");
   await page.locator('#companion-send').click();
   await expect(page.locator('#message')).toContainText("Didn't catch that");
   await expect.poll(() =>
     page.evaluate(() => window.realm.match.actors.find(a => a.ownerId === window.realm.state.playerId && a.kind === 'companion')?.order),
-  ).toBe('gather');
+  ).toBe('gather_gold');
 });
