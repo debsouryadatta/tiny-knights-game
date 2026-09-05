@@ -28,15 +28,16 @@ test('iPhone Home Screen guide and installed mode',async({page},info)=>{
     Element.prototype.requestFullscreen=undefined;
   });
   await page.goto('/');
-  await expect(page.locator('.mobile-play-prompt')).toBeHidden();
-  await page.locator('input[name="name"]').fill('iPhone tester');
-  await page.locator('#create-room').click();
+  await expect(page.locator('.mobile-play-prompt')).toBeVisible();
   await expect(page.locator('#mobile-play-start')).toHaveText('Add to Home Screen');
   await page.locator('#mobile-play-start').click();
   await expect(page.getByRole('dialog')).toContainText('Open as Web App');
   await expect(page.getByRole('dialog')).toContainText('Internet is required');
   await page.getByRole('button',{name:'Got it',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.mobile-play-prompt')).toBeHidden();
+  await page.locator('input[name="name"]').fill('iPhone tester');
+  await page.locator('#create-room').click();
   await page.locator('#lobby-start').click();
   await expect(page.locator('#join-screen')).toBeHidden();
   await page.locator('#fullscreen').click();
@@ -51,6 +52,21 @@ test('iPhone Home Screen guide and installed mode',async({page},info)=>{
   expect(await page.evaluate(async()=> (await import('/src/fullscreen.js')).enterFullscreen())).toBe('standalone');
   await page.evaluate(()=>{Object.defineProperty(navigator,'standalone',{get:()=>false});const original=window.matchMedia;window.matchMedia=q=>q==='(display-mode: standalone)'?{matches:true}:original(q);});
   expect(await page.evaluate(async()=> (await import('/src/fullscreen.js')).enterFullscreen())).toBe('standalone');
+});
+
+test('iPhone landing prompt can be dismissed and stays hidden when installed',async({page},info)=>{
+  test.skip(info.project.name==='desktop');
+  await page.addInitScript(()=>Object.defineProperty(navigator,'userAgent',{get:()=> 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)'}));
+  await page.goto('/');
+  await expect(page.locator('.mobile-play-prompt')).toBeVisible();
+  await page.locator('#mobile-play-dismiss').click();
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.locator('.mobile-play-prompt')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('.mobile-play-prompt')).toBeVisible();
+  await page.addInitScript(()=>Object.defineProperty(navigator,'standalone',{get:()=>true}));
+  await page.reload();
+  await expect(page.locator('.mobile-play-prompt')).toBeHidden();
 });
 
 test('Home Screen manifest and app icons are served',async({request})=>{

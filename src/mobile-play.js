@@ -11,7 +11,8 @@ export function installMobilePlayPrompt() {
   const start=panel.querySelector('#mobile-play-start'),tip=panel.querySelector('p');
   const refresh=()=>{
     const mobile=matchMedia('(pointer: coarse)').matches&&Math.min(innerWidth,innerHeight)<=900;
-    panel.hidden=!eligible||dismissed||!mobile||(isStandalone()&&innerWidth>innerHeight);
+    const iphoneInstall=isIPhone()&&!isStandalone();
+    panel.hidden=(!eligible&&!iphoneInstall)||dismissed||!mobile||(isStandalone()&&innerWidth>innerHeight);
     if(isIPhone()&&!isStandalone()){
       tip.textContent='Play without browser bars. Add Tiny Knights to your Home Screen. No App Store download.';
       start.textContent='Add to Home Screen';return;
