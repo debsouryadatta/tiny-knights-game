@@ -1,3 +1,4 @@
+import { createLandingMusic } from './audio/landing-music.js';
 import { createMatchIntro } from './match-intro.js';
 import { createWorldAmbience } from './audio/ambience.js';
 import { createGameplayAudio } from './audio/gameplay.js';
@@ -52,7 +53,9 @@ client.command = (command) => {
   renderer?.predictCommand?.(command);
   sendCommand(command);
 };
-const ui = createUI({ client, audio, onViewChange: () => {} });
+let landingMusic;
+const ui = createUI({ client, audio, onViewChange: () => {}, onLandingChange: active => landingMusic?.setActive(active) });
+landingMusic = createLandingMusic(document.querySelector('.landing-meta'));
 const stopMobilePrompt=installMobilePlayPrompt();
 const stopGameplayGestures=installGameplayGestureGuard();
 window.addEventListener('pagehide',stopGameplayGestures,{once:true});
@@ -122,6 +125,7 @@ if (import.meta.hot)
     stopGameplayGestures();
     disposed = true;
     matchIntro.destroy();
+    landingMusic.destroy();
     document.removeEventListener('visibilitychange', visibility);
     document.removeEventListener('pointerdown', unlockAudio);
     document.removeEventListener('touchend', unlockAudio);
