@@ -8,6 +8,8 @@ Run `npm install` then `npm run dev -- --port 4177`. Open http://localhost:4177.
 
 Current controls: WASD/arrows or joystick for continuous movement, hold Space/Attack to attack, Q/E/F for three skills, R recall, T regen, C gather, B tower placement, M overview, G grid, Escape cancel. Tap an enemy to target it. Drag a skill to aim and release to cast; drag toward Cancel to abort. Recall takes three seconds and movement or damage interrupts it. Landscape is recommended; fullscreen support varies by browser/OS.
 
+The top-right Ping indicator measures an application round trip over the live SpacetimeDB socket, including server response time. It uses a temporary read-only session subscription about every three seconds, even while idle. Green means under 100 ms, amber 100–199 ms, and red 200 ms or more. A three-second timeout shows `Ping >3s`; reconnecting hides the old measurement. This is not FPS, Vercel load time, or an ICMP network-only measurement.
+
 ### Local backend development
 
 With the existing local SpacetimeDB server running on port 3005, run this from the repository root:

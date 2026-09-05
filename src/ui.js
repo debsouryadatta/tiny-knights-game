@@ -39,6 +39,7 @@ export function createUI({ client, onViewChange = () => {} }) {
     if(joining)$('#join').textContent=failed?'Loading failed':playable?'Connecting to match…':'Preparing battlefield…';
   };
   $('.topbar .wordmark').remove();
+  $('.topbar .utility').insertAdjacentHTML('afterbegin','<span id="ping-indicator" class="ping-indicator" data-quality="unknown" title="Round trip to SpacetimeDB, including server response time. Refreshes about every 3 seconds.">Ping —</span>');
   $('.bank').innerHTML='<span class="blue"><b id="blue-score">0</b><small id="blue-core">100%</small></span><span id="clock">00:00</span><span class="red"><b id="red-score">0</b><small id="red-core">100%</small></span>';
   $('.hud').insertAdjacentHTML('beforeend','<div class="resource-bank"><span>Wood <b id="wood">0</b></span><span>Gold <b id="gold">0</b></span></div><div id="aim-cancel" class="aim-cancel" hidden>×<small>Cancel</small></div>');
   $('.actions').outerHTML=`<div class="combat-controls"><button data-action="attack" class="combat-button attack" aria-label="Attack: hold Space or hold this button" title="Hold Space to attack. Release to stop."><kbd>Space</kbd>${icon('attack')}<span>Attack</span></button>${[1,2,3].map((slot,i)=>`<button data-action="ability" data-slot="${slot}" class="combat-button skill skill-${slot}" aria-label="Ability ${slot}"><kbd>${['Q','E','F'][i]}</kbd>${icon(`ability${slot}`)}<span class="skill-name">Skill ${slot}</span><b class="cooldown" hidden></b></button>`).join('')}</div><div class="utility-actions">${[['recall','Recall','R'],['regen','Regen','T']].map(([a,n,k])=>`<button data-action="${a}" class="combat-button"><kbd>${k}</kbd>${icon(a)}<span>${n}</span><b class="cooldown" hidden></b></button>`).join('')}</div><div class="economy-actions">${[['gather','Gather','C'],['build','Build','B']].map(([a,n,k])=>`<button data-action="${a}"><kbd>${k}</kbd>${icon(a)}<span>${n}</span></button>`).join('')}</div>`;
@@ -101,6 +102,12 @@ export function createUI({ client, onViewChange = () => {} }) {
   const stopAll=()=>{stop();stopAttack();cancelAim();};listen(window,'blur',stopAll);listen(document,'visibilitychange',()=>{if(document.hidden)stopAll();});listen($('#help'),'click',stopAll);listen($('#leave'),'click',stopAll);listen(window,'keydown',e=>{if(e.key==='Escape')stopAll();});listen(root,'contextmenu',e=>{if(e.target.closest('.combat-button,.joystick'))e.preventDefault();});
   const movement=setInterval(()=>{if(stick.active&&hero&&hero.hp>0&&!view.inputDisabled)sendSteer();},50);
   const update=(state,session,status,error)=>{
+    const ping=$('#ping-indicator'),ms=client.ping?.ms;
+    const label=status==='reconnecting'?'Reconnecting':status!=='connected'?'Offline':client.ping?.state==='timeout'?'Ping >3s':ms==null?'Ping —':`Ping ${ms} ms`;
+    ping.textContent=label;
+    ping.dataset.quality=status!=='connected'||ms==null?(client.ping?.state==='timeout'?'poor':'unknown'):ms<100?'good':ms<200?'fair':'poor';
+    ping.dataset.samples=String(client.pingSamples||0);
+    ping.setAttribute('aria-label',`Server connection: ${label}`);
     currentSession=status==='disconnected'?null:session;hero=state?.actors.find(a=>a.id===currentSession?.playerId);const playing=Boolean(state&&currentSession);$('#join-screen').hidden=playing;document.body.classList.toggle('join-active',!playing);if(playing){joining=false;$('#join').disabled=false;$('#join').textContent=(roomInput.value.trim()?'Join duel':'Create duel');}
     if(!error)lastError='';if(error&&error!==lastError){lastError=error;message(error,true);$('#join-error').textContent=error;joining=false;$('#join').disabled=false;$('#join').textContent=(roomInput.value.trim()?'Join duel':'Create duel');}if(!state||!currentSession){sync();return;}
     $('#connection').textContent=status||'Connected';$('#room-code').textContent=session.room;const sec=Math.floor(state.elapsed);$('#clock').textContent=`${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;

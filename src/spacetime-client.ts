@@ -1,5 +1,6 @@
 import { DbConnection } from '../backend/spacetime/bindings';
 import { databaseName, databaseUri, sessionKey } from './connection-config';
+import { createPingMonitor } from './ping-monitor.js';
 import type { Command, Draft, GameState, Session } from '../shared/types';
 
 /** Same public contract as GameClient. Real SpacetimeDB subscription transport. */
@@ -9,6 +10,9 @@ export class SpacetimeGameClient {
   status = 'disconnected';
   error: string | null = null;
   latency = 0;
+  ping: {state:string;ms:number|null} = {state:'measuring',ms:null};
+  pingSamples = 0;
+  private stopPing: (() => void) | null = null;
   private connection: DbConnection | null = null;
   private listeners = new Set<() => void>();
   private draft: Draft | null = null;
@@ -43,7 +47,21 @@ export class SpacetimeGameClient {
         conn.db.mySession.onInsert(read); conn.db.mySession.onUpdate(read);
         conn.db.matchState.onInsert(read); conn.db.matchState.onUpdate(read);
         conn.subscriptionBuilder().onApplied(() => {
-          conn.reducers.joinMatch({ ...draft, room: draft.room! }).then(() => { this.error = null; read(); }).catch(error => { this.error = String(error); this.status = 'error'; this.emit(); });
+          conn.reducers.joinMatch({ ...draft, room: draft.room! }).then(() => {
+            if(this.stopped||this.connection!==conn)return;
+            this.error = null; read();
+            this.stopPing?.();
+            this.stopPing=createPingMonitor({
+              probe:(done:()=>void,failed:()=>void)=>{
+                const handle=conn.subscriptionBuilder().onApplied(done).onError(failed).subscribe('SELECT * FROM my_session');
+                return ()=>{try{handle.unsubscribe();}catch{/* Connection may already be closed. */}};
+              },
+              onUpdate:(ping:{state:string;ms:number|null})=>{
+                if(this.stopped||this.connection!==conn)return;
+                this.ping=ping;if(ping.state==='ready')this.pingSamples++;this.emit();
+              },
+            });
+          }).catch(error => { this.error = String(error); this.status = 'error'; this.emit(); });
         }).onError(ctx => { this.error = String(ctx.event); this.emit(); })
           .subscribe([`SELECT * FROM match_state WHERE room = '${draft.room!.replace(/'/g, '')}'`, 'SELECT * FROM my_session']);
       })
@@ -54,6 +72,7 @@ export class SpacetimeGameClient {
   }
   private retry() {
     if (this.stopped || this.reconnectTimer) return;
+    this.stopPing?.();this.stopPing=null;this.ping={state:'measuring',ms:null};
     this.status = 'reconnecting'; this.emit();
     this.reconnectTimer = setTimeout(() => { this.reconnectTimer = null; this.connect(); }, 1500);
   }
@@ -69,6 +88,7 @@ export class SpacetimeGameClient {
   }
   disconnect() {
     this.stopped = true;
+    this.stopPing?.();this.stopPing=null;this.ping={state:'measuring',ms:null};this.pingSamples=0;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     const old = this.connection; this.connection = null; old?.disconnect();

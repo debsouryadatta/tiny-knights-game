@@ -17,3 +17,10 @@
 @media (orientation: portrait) and (max-width: 600px) { #ui .cast-status { top: 250px; width: 190px; } }
 @media (orientation: landscape) and (max-height: 540px) { #ui .cast-status { top: 64px; width: 175px; padding: 7px 10px; } }
 @media (prefers-reduced-motion: reduce) { #ui .cast-meter i { transition: none; } }
+#ui .ping-indicator { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: #b9c8d2; font: 600 11px/1.2 system-ui,sans-serif; font-variant-numeric: tabular-nums; pointer-events: auto; }
+#ui .ping-indicator::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+#ui .ping-indicator { align-self: center; padding: 5px 6px; border-radius: 4px; background: #071923e6; border: 1px solid #9db6c733; }
+#ui .ping-indicator[data-quality="good"] { color: #8fe3af; }
+#ui .ping-indicator[data-quality="fair"] { color: #f3ce78; }
+#ui .ping-indicator[data-quality="poor"] { color: #ffa6a0; }
+@media (max-width:600px) { #ui .ping-indicator { font-size: 9px; gap: 3px; } }

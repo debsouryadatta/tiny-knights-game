@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['combat-polish.spec.js', 'duel.spec.js', 'new-realm.spec.js', 'moba-controls.spec.js', 'mobile-rendering.spec.js', 'responsive-controls.spec.js', 'motion-regression.spec.js', 'gameplay-ux.spec.js', 'startup-loading.spec.js'],
+  testMatch: ['ping.spec.js', 'combat-polish.spec.js', 'duel.spec.js', 'new-realm.spec.js', 'moba-controls.spec.js', 'mobile-rendering.spec.js', 'responsive-controls.spec.js', 'motion-regression.spec.js', 'gameplay-ux.spec.js', 'startup-loading.spec.js'],
   timeout: 60000,
   expect: { timeout: 12000 },
   fullyParallel: false,
