@@ -6,6 +6,7 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import CheckClientVersionReducer from "../check_client_version_reducer";
 import ControlCommandReducer from "../control_command_reducer";
 import EnterLobbyReducer from "../enter_lobby_reducer";
 import IssueCommandReducer from "../issue_command_reducer";
@@ -18,6 +19,7 @@ import QuickPreferenceReducer from "../quick_preference_reducer";
 import RestartMatchReducer from "../restart_match_reducer";
 import StartLobbyReducer from "../start_lobby_reducer";
 
+export type CheckClientVersionParams = __Infer<typeof CheckClientVersionReducer>;
 export type ControlCommandParams = __Infer<typeof ControlCommandReducer>;
 export type EnterLobbyParams = __Infer<typeof EnterLobbyReducer>;
 export type IssueCommandParams = __Infer<typeof IssueCommandReducer>;

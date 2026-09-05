@@ -2,7 +2,7 @@
 
 ## Live backend
 
-- Database: `little-realm-live`
+- Database: `little-realm-teams-v2`
 - SDK origin: `https://spacetime.tinkerers.space`
 - WebSocket: `wss://spacetime.tinkerers.space`
 - CLI server alias: `home`
@@ -29,7 +29,7 @@ Set these public build-time variables for Production, Preview, and Development:
 
 ```dotenv
 VITE_SPACETIMEDB_URI=https://spacetime.tinkerers.space
-VITE_SPACETIMEDB_DB_NAME=little-realm-live
+VITE_SPACETIMEDB_DB_NAME=little-realm-teams-v2
 VITE_COMPANION_PLANNER=false
 ```
 
@@ -46,9 +46,19 @@ vercel --prod --yes
 ```sh
 spacetime server ping home
 spacetime list -s home
-spacetime sql -s home little-realm-live "SELECT room, revision FROM match_state"
+spacetime sql -s home little-realm-teams-v2 "SELECT room, revision FROM match_state"
 npx tsx backend/spacetime/integration.ts
 npm run build
 ```
 
 The built client must contain `https://spacetime.tinkerers.space` and must not contain the raw server IP or the retired hosted-service origin. Opening the SpacetimeDB origin itself returns an empty 404; `/v1/ping` is the health endpoint.
+
+## Multiplayer release compatibility
+
+Vercel's `build:verified` checks the configured SpacetimeDB protocol before compiling the frontend. Set `VITE_SPACETIMEDB_URI` and `VITE_SPACETIMEDB_DB_NAME` to the exact verified backend. Run `npm run check:backend` to diagnose a blocked release; it never creates a room. A missing reducer, unreachable endpoint or different version must stop the rollout.
+
+For the transition from the live square duel to the rectangular team map, publish and test a separate versioned backend database first, then point the new frontend build at it. This avoids moving still-open old clients onto incompatible geometry. Keep the old duel database available for those existing sessions. Do not publish the rectangular frontend against the legacy duel module or assume a GitHub/Vercel push updates SpacetimeDB.
+
+Local playability testing uses `tiny-knights-playability-dev` on port 3024. Real browser flow tests are `tests/multiplayer-flows.spec.js`; use a fresh database and a fixed frontend build. Do not run independent Quick Play test suites concurrently against the same database, since their players could match each other.
+
+Production team release: database `little-realm-teams-v2`, frontend `https://www.tinyknights.fun`. Vercel connection variables were configured through the CLI; the build verified protocol 2 before publishing. The legacy `little-realm-live` database was not overwritten.

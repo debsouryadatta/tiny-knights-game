@@ -34,6 +34,7 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import CheckClientVersionReducer from "./check_client_version_reducer";
 import ControlCommandReducer from "./control_command_reducer";
 import EnterLobbyReducer from "./enter_lobby_reducer";
 import IssueCommandReducer from "./issue_command_reducer";
@@ -126,6 +127,7 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("check_client_version", CheckClientVersionReducer),
   __reducerSchema("control_command", ControlCommandReducer),
   __reducerSchema("enter_lobby", EnterLobbyReducer),
   __reducerSchema("issue_command", IssueCommandReducer),

@@ -1,3 +1,4 @@
+import { GAME_PROTOCOL_VERSION, SERVER_MISMATCH_MESSAGE, isCompatibleSnapshot } from '../shared/protocol';
 import { DbConnection } from '../backend/spacetime/bindings';
 import { databaseName, databaseUri, sessionKey } from './connection-config';
 import { createPingMonitor } from './ping-monitor.js';
@@ -28,7 +29,7 @@ export class SpacetimeGameClient {
   join(draft: Draft) {
     this.disconnect();
     let resumeRoom:string|undefined;
-    try { if(draft.mode==='quick')resumeRoom=sessionStorage.getItem(sessionKey('quick-room'))||undefined; } catch {}
+    try { if(draft.mode==='quick')resumeRoom=sessionStorage.getItem(sessionKey(`quick-room-${draft.size}`))||undefined; } catch {}
     this.draft = { ...draft, room: (draft.room || resumeRoom || Array.from(crypto.getRandomValues(new Uint8Array(3)),b=>b.toString(16).padStart(2,'0')).join('')).trim().toUpperCase() };
     try { this.token = sessionStorage.getItem(sessionKey(this.draft.room)) ?? undefined; } catch { this.token = undefined; }
     this.state = null; this.session = null; this.lobby=null;this.roster=[];this.quickQueue=null;this.quickOffers=[]; this.error = null; this.stopped = false;
@@ -43,6 +44,9 @@ export class SpacetimeGameClient {
         if(this.stopped || this.connection !== conn){conn.disconnect();return;}
         this.token = token;
         let subscribedRoom='';
+        let lastSnapshot='';
+        let admitted=false;
+        const incompatible=()=>{if(this.stopped||this.connection!==conn)return;this.state=null;this.session=null;this.lobby=null;this.disconnect();this.error=SERVER_MISMATCH_MESSAGE;this.status='error';this.emit();};
         let roomSubscription: {unsubscribe:()=>void}|undefined;
         const subscribeRoom=(room:string)=>{
           if(subscribedRoom===room)return;subscribedRoom=room;
@@ -50,20 +54,25 @@ export class SpacetimeGameClient {
           roomSubscription=conn.subscriptionBuilder().onApplied(read).onError(ctx=>{if(this.stopped||this.connection!==conn)return;this.error=String(ctx.event);this.status='error';this.emit();}).subscribe([`SELECT * FROM match_state WHERE room = '${room.replace(/'/g,'')}'`,`SELECT * FROM room_lobby WHERE room = '${room.replace(/'/g,'')}'`]);
         };
         const read = () => {
-          if(this.stopped||this.connection!==conn)return;
+          // Existing memberships may still contain a pre-migration waiting snapshot.
+          if(!admitted||this.stopped||this.connection!==conn)return;
           const member = [...conn.db.mySession.iter()][0];
           if (member) { this.session = { playerId: member.playerId, room: member.room, token }; this.status = 'connected';draft.room=member.room;subscribeRoom(member.room);
-            try{sessionStorage.setItem(sessionKey(member.room),token);if(draft.mode==='quick')sessionStorage.setItem(sessionKey('quick-room'),member.room);}catch{}
+            try{sessionStorage.setItem(sessionKey(member.room),token);if(draft.mode==='quick')sessionStorage.setItem(sessionKey(`quick-room-${draft.size}`),member.room);}catch{}
           }
           this.lobby=conn.db.roomLobby.room.find(draft.room!)??null;
           this.roster=[...conn.db.lobbyRoster.iter()];
           this.quickQueue=[...conn.db.myQuickQueue.iter()][0]??null;
           this.quickOffers=[...conn.db.quickMatchOffers.iter()];
           const row = conn.db.matchState.room.find(draft.room!);
-          if (row) this.state = JSON.parse(row.snapshot) as GameState;
+          if (row && row.snapshot!==lastSnapshot) {
+            const next=JSON.parse(row.snapshot) as GameState;
+            if(!isCompatibleSnapshot(next)){incompatible();return;}
+            this.state=next;lastSnapshot=row.snapshot;
+          }
           this.emit();
         };
-        conn.db.mySession.onInsert(read); conn.db.mySession.onUpdate(read);
+        conn.db.mySession.onInsert(read); conn.db.mySession.onUpdate(read); conn.db.mySession.onDelete(read);
         conn.db.matchState.onInsert(read); conn.db.matchState.onUpdate(read);
         conn.db.roomLobby.onInsert(read);conn.db.roomLobby.onUpdate(read);conn.db.roomLobby.onDelete(read);
         conn.db.lobbyRoster.onInsert(read);conn.db.lobbyRoster.onDelete(read);
@@ -71,9 +80,12 @@ export class SpacetimeGameClient {
         conn.db.quickMatchOffers.onInsert(read);conn.db.quickMatchOffers.onDelete(read);
         conn.subscriptionBuilder().onApplied(() => {
           const args={room:draft.room!,name:draft.name,hero:draft.hero,companion:draft.companion,size:draft.size};
-          (draft.mode?conn.reducers.enterLobby({...args,mode:draft.mode}):conn.reducers.joinMatch(args)).then(() => {
+          conn.reducers.checkClientVersion({version:GAME_PROTOCOL_VERSION}).catch(()=>{incompatible();throw new Error(SERVER_MISMATCH_MESSAGE);}).then(()=>{
             if(this.stopped||this.connection!==conn)return;
-            this.error = null; read();
+            return draft.mode?conn.reducers.enterLobby({...args,mode:draft.mode}):conn.reducers.joinMatch(args);
+          }).then(() => {
+            if(this.stopped||this.connection!==conn)return;
+            admitted=true;this.error = null; read();
             this.stopPing?.();
             this.stopPing=createPingMonitor({
               probe:(done:()=>void,failed:()=>void)=>{
@@ -116,7 +128,7 @@ export class SpacetimeGameClient {
   waitForHuman(){return this.quickAction(()=>this.connection?.reducers.quickPreference({humanOnly:true}));}
   playBot(){return this.quickAction(()=>this.connection?.reducers.playQuickBot({}));}
   joinRunning(room:string){return this.quickAction(()=>this.connection?.reducers.joinRunningMatch({room}));}
-  async leave(){if(this.lobby&&!this.lobby.started)await this.connection?.reducers.leaveLobby({});try{if(this.draft?.mode==='quick')sessionStorage.removeItem(sessionKey('quick-room'));}catch{}this.disconnect();}
+  async leave(){if(this.lobby&&!this.lobby.started)await this.connection?.reducers.leaveLobby({});try{if(this.draft?.mode==='quick')sessionStorage.removeItem(sessionKey(`quick-room-${this.draft.size}`));}catch{}this.disconnect();}
   disconnect() {
     this.stopped = true;
     this.stopPing?.();this.stopPing=null;this.ping={state:'measuring',ms:null};this.pingSamples=0;

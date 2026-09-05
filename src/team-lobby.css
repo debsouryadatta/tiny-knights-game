@@ -1,0 +1,53 @@
+.team-size { margin-top: 12px; }
+.team-size > small { display:block; color:#aeb9c8; font:10px/1.5 system-ui,sans-serif; margin-top:5px; }
+#ui .team-size .choices button { min-height:44px; padding:7px 12px; }
+#ui .team-size .choices b { font-size:15px; }
+#ui .waiting-lobby { width:min(620px,100%); max-height:calc(100dvh - 32px); overflow-y:auto; }
+#ui .lobby-roster { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.lobby-team { min-width:0; }
+#ui .lobby-team h2 { font:600 12px/1.5 system-ui,sans-serif; margin:0 0 8px; }
+.team-blue h2 { color:#9acdf2; }
+.team-red h2 { color:#f0a4a4; }
+#ui .lobby-seat { padding:10px; margin-bottom:6px; border-left:3px solid #7eb5d9; }
+#ui .team-red .lobby-seat { border-left-color:#d37c7c; }
+#ui .lobby-seat b { overflow-wrap:anywhere; font-size:12px; }
+#ui .lobby-seat span { line-height:1.5; }
+#ui .waiting-lobby h1 { font-size:36px; margin:8px 0; }
+#ui .waiting-lobby .lobby-code { margin:8px 0 14px; padding:10px; }
+#ui .waiting-lobby .waiting-actions { display:grid; grid-template-columns:1fr 1fr; position:static; }
+#ui .waiting-lobby .waiting-actions button { margin-top:0; }
+#ui .waiting-lobby.public-queue .waiting-actions { grid-template-columns:1fr; }
+#match-roster { margin-block:18px; }
+@media(max-width:430px) {
+  #ui .waiting-lobby { padding:16px; }
+  #ui .lobby-roster { gap:8px; }
+  #ui .lobby-seat { padding:8px; }
+}
+@media(orientation:landscape) and (max-height:540px) {
+  #ui .team-size { margin-top:6px; }
+  #ui .team-size .choices button { min-height:44px; padding:4px 10px; }
+  #ui .waiting-lobby { max-height:calc(100dvh - 20px); }
+}
+
+@media(orientation:landscape) and (max-height:540px) {
+  #ui #waiting-lobby { display:block; }
+  #ui #waiting-lobby .lobby-roster { grid-template-columns:repeat(2,minmax(0,1fr)); margin:12px 0; }
+}
+
+.battlefield-brief { display:flex;align-items:center;gap:16px;padding:10px 0 16px; }
+.battlefield-brief canvas { width:140px;height:98px;flex-shrink:0;border:1px solid #748578;image-rendering:pixelated; }
+.battlefield-brief b { color:#ead5ac;font-size:13px; }
+#ui .battlefield-brief p { margin:7px 0;color:#a8d3b7;font-size:12px; }
+.battlefield-brief small { display:block;line-height:1.5; }
+#starting-lane { margin-top:7px;color:#e5bc65; }
+.lane-assignment { display:block;color:#e5bc65;font-size:10px;margin-bottom:4px; }
+.hero-lane { display:block;color:#d5c18e;font-size:9px;margin-top:3px; }
+@media(max-width:430px) { .battlefield-brief { gap:10px; }.battlefield-brief canvas { width:100px;height:70px; } }
+
+#ui #minimap { width:100%; height:auto; aspect-ratio:10 / 7; }
+
+@media(orientation:landscape) and (max-height:540px) {
+  #ui #join-screen #draft { grid-template-areas:'heading heroes' 'name companions' 'modes actions' 'loading loading'; }
+  #ui #draft .team-size { grid-area:modes; align-self:start; margin-top:0; }
+  #ui #draft .join-heading h1 { font-size:24px; }
+}
