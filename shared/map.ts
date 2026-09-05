@@ -5,7 +5,9 @@ export function spawnFor(team:Team,slot:number):Vec {const p={x:10+slot%3,y:53+M
 export function laneWaypoints(team:Team,lane:number):Vec[]{const a=baseFor('blue'),b=baseFor('red');const paths=[[a,{x:6,y:45},{x:6,y:7},{x:44,y:7},b],[a,{x:14,y:43},{x:22,y:36},{x:31,y:32},{x:32,y:31},{x:41,y:27},{x:49,y:20},b],[a,{x:19,y:56},{x:57,y:56},{x:57,y:18},b]];const p=paths[Math.max(0,Math.min(2,lane))];return (team==='blue'?p:[...p].reverse()).map(v=>({...v}));}
 function distance(x:number,y:number,a:Vec,b:Vec){const dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((x-a.x)*dx+(y-a.y)*dy)/(dx*dx+dy*dy)));return Math.hypot(x-a.x-t*dx,y-a.y-t*dy);}
 const paths=[0,1,2].map(i=>laneWaypoints('blue',i));
-export function laneAt(x:number,y:number):number {let best=Infinity,lane=-1;paths.forEach((p,i)=>{for(let j=1;j<p.length;j++){const d=distance(x,y,p[j-1],p[j]);if(d<best){best=d;lane=i;}}});return best<=1.9?lane:-1;}
+// Keep the old clearing geometry for roaming, but only the central lane is a
+// road or a river crossing. Lane 1 matches the renderer and every spawned wave.
+export function laneAt(x:number,y:number):number {const p=paths[1];let best=Infinity;for(let j=1;j<p.length;j++)best=Math.min(best,distance(x,y,p[j-1],p[j]));return best<=1.9?1:-1;}
 export const isLane=(x:number,y:number)=>laneAt(x,y)>=0;
 export const riverX=(y:number)=>31.5+Math.sin((y-31.5)/8)*2.4;
 export const isLand=(x:number,y:number)=>x>=2&&x<62&&y>=2&&y<62;

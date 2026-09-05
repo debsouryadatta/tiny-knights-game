@@ -1,10 +1,24 @@
-# Little Realm — Divided Realm prototype
+# Little Realm · 1v1 Duel
 
-The main route is now a 2v2/3v3 multiplayer prototype built on this repository's Canvas 2D engine and Tiny Swords sprites. Choose a hero and personal companion, gather shared resources, build towers, and destroy the enemy core. Empty seats are bots; share a room code to play together.
+The main route is a strict 1v1 multiplayer duel built on the Canvas 2D engine and Tiny Swords sprites. Each side has one hero and one personal companion. Three-minion waves push the central lane toward the enemy core. Create a duel, then click the room code in the match to copy an invite link. Your friend takes the opposing bot's seat; a third player cannot join. Guardian and Scout escort by default, while Harvester gathers resources. Older 2v2/3v3 rooms cannot be joined; create a new duel.
 
-Run `npm install` then `npm run dev -- --port 4177`. Open http://localhost:4177. The frontend requires SpacetimeDB on port 3005, database `tiny-knights-prototype`. `bash backend/spacetime/run.sh publish` publishes the module; `bash backend/spacetime/run.sh integration` checks real SDK multiplayer behavior. The convenience script currently reuses the CLI/runtime in adjacent `empire-game/backend/spacetime`; this is not yet a standalone deployment installer. Production needs a hosted backend and secure reverse proxy, not just the static build.
+An earlier cloud backend is deployed as [`debsouryadatta-tiny-knights`](https://spacetimedb.com/debsouryadatta-tiny-knights). This 1v1 revision was published to the local database; Maincloud needs a matching module publish before using the new frontend there. For Vercel build settings, public connection variables, and cloud publishing commands, see [cloud deployment](design/cloud-deployment.md). Vercel serves the static frontend and browsers connect directly to Maincloud; the current deterministic game needs no separate Node server. The Vercel frontend itself has not been deployed by this setup step.
+
+Run `npm install` then `npm run dev -- --port 4177`. Open http://localhost:4177. By default the local frontend requires SpacetimeDB on port 3005, database `tiny-knights-prototype`. `bash backend/spacetime/run.sh publish` publishes the local module; `bash backend/spacetime/run.sh integration` checks real SDK multiplayer behavior. The local convenience script currently reuses the CLI/runtime in adjacent `empire-game/backend/spacetime`; this is not yet a standalone local deployment installer. Cloud publishing uses your global Maincloud login instead.
 
 Current controls: WASD/arrows or joystick for continuous movement, hold Space/Attack to attack, Q/E/F for three skills, R recall, T regen, C gather, B tower placement, M overview, G grid, Escape cancel. Tap an enemy to target it. Drag a skill to aim and release to cast; drag toward Cancel to abort. Recall takes three seconds and movement or damage interrupts it. Landscape is recommended; fullscreen support varies by browser/OS.
+
+### Local backend development
+
+With the existing local SpacetimeDB server running on port 3005, run this from the repository root:
+
+```sh
+npm run game
+```
+
+This builds the nested server module, regenerates `backend/spacetime/bindings`, publishes to `tiny-knights-prototype` without deleting data, starts Vite on port 4177, and watches the module. Do not start a second Vite process on the same port. Root `spacetime.json` defines these local targets using the [SpacetimeDB configuration format](https://spacetimedb.com/docs/cli-reference/spacetime-json/). Personal `spacetime*.local.json` overrides are ignored by Git.
+
+Use the helper on this checkout because the existing database belongs to the isolated CLI identity in the adjacent `empire-game/backend/spacetime/.runtime` directory. A bare `spacetime dev` uses your global CLI login, which may not own this database. The helper does not change that login. This is still a local setup, not a cloud deployment. Do not use `--template chat-react-ts` inside this existing game.
 
 Actors now use continuous positions and physical separation. Tiles remain terrain and construction units. Shared collision runs on both server and local prediction; stop/release and simultaneous movement/action inputs have separate handling.
 

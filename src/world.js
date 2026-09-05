@@ -8,6 +8,8 @@ let seed=80319;
 const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
 const hash=(x,y)=>{let n=Math.imul(x+119,374761393)^Math.imul(y+217,668265263);n=Math.imul(n^(n>>>13),1274126177);return(n>>>0)/4294967296;};
 const px=n=>(n+.5)*TILE;
+const centralLane=laneWaypoints('blue',1);
+function laneDistance(x,y){let nearest=Infinity;for(let i=1;i<centralLane.length;i++){const a=centralLane[i-1],b=centralLane[i],dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((x-a.x)*dx+(y-a.y)*dy)/(dx*dx+dy*dy||1)));nearest=Math.min(nearest,Math.hypot(x-a.x-t*dx,y-a.y-t*dy));}return nearest;}
 function add(type,x,y,scale=1){objects.push({type,x:px(x),y:px(y),scale,phase:random()*8,team:biomeAt(x,y)});}
 function inBase(x,y){return(x<14&&y>49)||(x>49&&y<14);}
 // Dense borders and irregular groves frame cleared, collision-safe lane corridors.
@@ -18,11 +20,11 @@ for(let y=0;y<HEIGHT;y++)for(let x=0;x<WIDTH;x++){
   const camp=camps.some(c=>Math.hypot(x-c.x,y-c.y)<c.r+.6);
   if(camp)continue;
   if(border&&!isLand(x,y)||isForest(x,y)){add(`tree${1+Math.floor(random()*4)}`,x+(random()-.5)*.3,y+(random()-.5)*.25,.57+random()*.13);}
-  else if(hash(x+91,y)>.7)add(`bush${1+Math.floor(random()*4)}`,x,y,.65);
+  else if(laneDistance(x,y)>3.4&&hash(x+91,y)>.82)add(`bush${1+Math.floor(random()*4)}`,x,y,.55);
   else if(hash(x+54,y)>.95)add('rock',x,y,.7);
 }
 // Decoration stays away from resource interaction cells and enclosure openings.
-for(const c of camps)add(biomeAt(c.x,c.y)==='red'?'redHouse1':'House1',c.x,c.y-1.8,.58);
+for(const c of camps)if(laneDistance(c.x,c.y-1.8)>3.5)add(biomeAt(c.x,c.y)==='red'?'redHouse1':'House1',c.x,c.y-1.8,.58);
 
 const buckets=new Map();
 for(const o of objects){const key=`${Math.floor(o.x/384)},${Math.floor(o.y/384)}`;if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(o);}
@@ -50,23 +52,24 @@ function paintTerrain(g,imgs,bounds={left:0,top:0,right:WORLD.W,bottom:WORLD.H})
     g.drawImage(im,tx*TILE,ty*TILE,TILE,TILE,x*TILE,y*TILE,TILE,TILE);
     if(red){g.fillStyle='#4b3f4824';g.fillRect(x*TILE,y*TILE,TILE,TILE);}
   }
-  // The same authoritative lane query clips dirt and determines passable bridges.
+  // Lane 1 is the duel route; shared/map owns all collision and pathfinding.
   g.save();g.beginPath();for(let y=Math.max(2,y0);y<Math.min(62,y1);y++)for(let x=Math.max(2,x0);x<Math.min(62,x1);x++)if(!isRiver(x,y))g.rect(x*TILE,y*TILE,TILE,TILE);g.clip();
-  g.lineJoin='round';g.lineCap='round';for(const [width,color]of [[3.9,'#8b9569'],[3.5,'#b8a777'],[3.15,'#c9b687']]){g.lineWidth=width*TILE;g.strokeStyle=color;for(let lane=0;lane<3;lane++){g.beginPath();laneWaypoints('blue',lane).forEach((p,i)=>i?g.lineTo(px(p.x),px(p.y)):g.moveTo(px(p.x),px(p.y)));g.stroke();}}
-  for(let y=Math.max(2,y0);y<Math.min(62,y1);y++)for(let x=Math.max(2,x0);x<Math.min(62,x1);x++)if(isLane(x,y)){for(let i=0;i<12;i++){g.fillStyle=i%2?'#766b512c':'#eed5a22b';g.fillRect(x*TILE+hash(x+i*9,y)*62,y*TILE+hash(x,y+i*7)*62,3,2);}}
+  g.lineJoin='round';g.lineCap='round';for(const [width,color]of [[4.1,'#819165'],[3.7,'#a69872'],[3.2,'#c2b28a']]){g.lineWidth=width*TILE;g.strokeStyle=color;g.beginPath();centralLane.forEach((p,i)=>i?g.lineTo(px(p.x),px(p.y)):g.moveTo(px(p.x),px(p.y)));g.stroke();}
+  for(let y=Math.max(2,y0);y<Math.min(62,y1);y++)for(let x=Math.max(2,x0);x<Math.min(62,x1);x++)if(laneDistance(x,y)<1.9){for(let i=0;i<6;i++){g.fillStyle=i%2?'#766b511c':'#eed5a221';g.fillRect(x*TILE+hash(x+i*9,y)*62,y*TILE+hash(x,y+i*7)*62,3,2);}}
   g.restore();
   // Small river stones and luminous shoals, deterministic and inexpensive.
   for(let y=3;y<61;y++){const rx=riverX(y);for(const sign of [-1,1]){const x=(rx+sign*2.1)*TILE;g.fillStyle='#597b70';g.fillRect(x,px(y),13,9);g.fillStyle='#8b9f80';g.fillRect(x+3,px(y)-3,7,4);}g.fillStyle='#78b8bd35';g.fillRect((rx-1)*TILE,px(y),TILE*.8,3);}
-  for(const y of [7,31.5,56]){const x=(riverX(y)-3.6)*TILE,w=7.2*TILE,h=y===31.5?3.5*TILE:3.8*TILE,top=px(y)-h/2;g.fillStyle='#344c54';g.fillRect(x,top+15,w,h);for(let yy=top;yy<top+h;yy+=32)for(let xx=x;xx<x+w;xx+=64)stone(g,xx,yy,64,32,true);for(const yy of [top-12,top+h-2])for(let xx=x;xx<x+w;xx+=64)stone(g,xx,yy,64,18);}
+  for(const y of [31.5]){const x=(riverX(y)-3.6)*TILE,w=7.2*TILE,h=3.5*TILE,top=px(y)-h/2;g.fillStyle='#344c54';g.fillRect(x,top+15,w,h);for(let yy=top;yy<top+h;yy+=32)for(let xx=x;xx<x+w;xx+=64)stone(g,xx,yy,64,32,true);for(const yy of [top-12,top+h-2])for(let xx=x;xx<x+w;xx+=64)stone(g,xx,yy,64,18);}
   // Worn earth makes camp interiors readable through the forest canopy.
   for(const camp of camps){g.fillStyle=biomeAt(camp.x,camp.y)==='red'?'#8d776654':'#c4ae7360';g.beginPath();g.arc(px(camp.x),px(camp.y),camp.r*TILE*.77,0,Math.PI*2);g.fill();}
   fortress(g,false);fortress(g,true);
   for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)if(isWall(x,y)){stone(g,x*TILE+5,y*TILE+20,54,28,biomeAt(x,y)==='red');}
   // Lane standards sit outside the collision corridors.
-  for(const y of [7,56])for(const x of [15,46])flag(g,px(x),px(y-2.6),biomeAt(x,y)==='red');
+  for(const [x,y] of [[25,37],[38,26]])flag(g,px(x),px(y),biomeAt(x,y)==='red');
 }
 
-// No full-world bitmap: at most 12 small terrain chunks are retained (12 MiB).
+// Keep 12 chunks on ordinary screens; larger views retain their visible chunks
+// so the first frame can finish without evicting terrain it is still painting.
 // The overview is painted independently, so a lost terrain cache cannot blank it.
 export function bakeTerrain(imgs){
   const size=512,limit=12,cache=new Map();
@@ -75,8 +78,8 @@ export function bakeTerrain(imgs){
     const g=overview.getContext('2d',{alpha:false});if(!g)throw new Error('Map canvas unavailable');
     // A schematic costs one small fill per tile: no full-world texture bake.
     for(let y=0;y<HEIGHT;y++)for(let x=0;x<WIDTH;x++){
-      const red=biomeAt(x,y)==='red',land=isLand(x,y),river=isRiver(x,y),lane=isLane(x,y);
-      g.fillStyle=!land||river&&!lane?'#284754':lane?'#c9b687':isWall(x,y)?'#809398':red?'#79656c':'#8fab59';
+      const red=biomeAt(x,y)==='red',land=isLand(x,y),river=isRiver(x,y),lane=laneDistance(x,y)<=1.9;
+      g.fillStyle=!land||river&&!lane?'#284754':lane?'#c2b28a':isWall(x,y)?'#809398':red?'#79656c':'#8fab59';
       g.fillRect(x*8,y*8,8,8);
     }
     g.save();g.scale(512/WORLD.W,512/WORLD.H);fortress(g,false);fortress(g,true);g.restore();
@@ -88,25 +91,32 @@ export function bakeTerrain(imgs){
     clear(){for(const c of cache.values()){c.width=1;c.height=1;}cache.clear();},
     get count(){return cache.size;},
     draw(g,bounds,small=false){
-      if(small){g.drawImage(overview,0,0,WORLD.W,WORLD.H);return;}
+      if(small){g.drawImage(overview,0,0,WORLD.W,WORLD.H);return true;}
       const left=Math.max(0,Math.floor(bounds.left/size)),right=Math.min(7,Math.floor(bounds.right/size));
       const top=Math.max(0,Math.floor(bounds.top/size)),bottom=Math.min(7,Math.floor(bounds.bottom/size));
-      let prepared=0;
-      for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++){
+      let prepared=0,complete=true;const started=performance.now(),chunks=[];
+      const cx=(bounds.left+bounds.right)/2/size,cy=(bounds.top+bounds.bottom)/2/size;
+      for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++)chunks.push({x,y,d:Math.hypot(x+.5-cx,y+.5-cy)});
+      chunks.sort((a,b)=>a.d-b.d);
+      const capacity=Math.max(limit,chunks.length);
+      while(cache.size>capacity){const oldest=cache.keys().next().value,old=cache.get(oldest);cache.delete(oldest);old.width=old.height=1;}
+      for(const {x,y} of chunks){
         const key=`${x},${y}`;let c=cache.get(key);
         if(!c){
           // Missing regions stay visible while texture work is spread over frames.
-          if(prepared>=1){g.drawImage(overview,x*64,y*64,64,64,x*size,y*size,size,size);continue;}
+          if(prepared>=1&&performance.now()-started>=6){complete=false;g.drawImage(overview,x*64,y*64,64,64,x*size,y*size,size,size);continue;}
           prepared++;
-          while(cache.size>=limit){const oldest=cache.keys().next().value,old=cache.get(oldest);cache.delete(oldest);old.width=old.height=1;}
-          c=document.createElement('canvas');c.width=c.height=size;
+          while(cache.size>=capacity){const oldest=cache.keys().next().value,old=cache.get(oldest);cache.delete(oldest);old.width=old.height=1;}
+          // A two-pixel bleed prevents hairline gaps at fractional camera scales.
+          c=document.createElement('canvas');c.width=c.height=size+4;
           const cg=c.getContext('2d',{alpha:false});
-          if(!cg){g.drawImage(overview,x*64,y*64,64,64,x*size,y*size,size,size);continue;}
-          cg.translate(-x*size,-y*size);paintTerrain(cg,imgs,{left:x*size,top:y*size,right:(x+1)*size,bottom:(y+1)*size});
+          if(!cg){complete=false;g.drawImage(overview,x*64,y*64,64,64,x*size,y*size,size,size);continue;}
+          cg.translate(-x*size+2,-y*size+2);paintTerrain(cg,imgs,{left:x*size-2,top:y*size-2,right:(x+1)*size+2,bottom:(y+1)*size+2});
           c.addEventListener('contextlost',()=>{if(cache.get(key)===c)cache.delete(key);});
         }
-        cache.delete(key);cache.set(key,c);g.drawImage(c,x*size,y*size);
+        cache.delete(key);cache.set(key,c);g.drawImage(c,x*size-2,y*size-2);
       }
+      return complete;
     }
   };
 }

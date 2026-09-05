@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createGame,addPlayer,applyCommand,stepGame} from './simulation';
 import {HERO_HP,BASIC_DPS,DASH_DAMAGE,SHOCKWAVE_DAMAGE,TOWER_DAMAGE,attackDamage,attackInterval} from './balance';
 function arena(){
- const s=createGame('balance',2),id=addPlayer(s,{name:'Player',hero:'knight',companion:'guardian',size:2});
+ const s=createGame('balance', 1),id=addPlayer(s,{name:'Player',hero:'knight',companion:'guardian',size: 1});
  const hero=s.actors.find(a=>a.id===id)!;hero.x=6;hero.y=20;hero.protectedUntil=0;
  const enemy=s.actors.find(a=>a.team!==hero.team)!;enemy.bot=false;enemy.x=7;enemy.y=20;
  s.actors=[hero,enemy];s.structures=[];return {s,hero,enemy};

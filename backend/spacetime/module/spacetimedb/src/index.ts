@@ -22,12 +22,13 @@ export const joinMatch = db.reducer({ room: t.string(), name: t.string(), hero: 
   if (!/^[a-zA-Z0-9-]{1,32}$/.test(args.room)) throw new SenderError('Invalid room code.');
   if (!['knight', 'ranger', 'lancer'].includes(args.hero)) throw new SenderError('Invalid hero.');
   if (!['harvester', 'guardian', 'scout'].includes(args.companion)) throw new SenderError('Invalid companion.');
-  if (args.size !== 2 && args.size !== 3) throw new SenderError('Invalid team size.');
+  if (args.size !== 1) throw new SenderError('Only 1v1 matches are supported.');
   const prior = ctx.db.membership.identity.find(ctx.sender);
   if (prior?.room === args.room) {
     const existing = ctx.db.match_state.room.find(prior.room);
     if (existing) {
       const state: GameState = JSON.parse(existing.snapshot);
+      if (state.size !== 1) throw new SenderError('This room uses an old team size. Create a new 1v1 room.');
       const actor = state.actors.find(a => a.id === prior.playerId);
       if (actor) actor.bot = false;
       ctx.db.match_state.room.update({ ...existing, snapshot: JSON.stringify(state), revision: existing.revision + 1 });
@@ -40,7 +41,7 @@ export const joinMatch = db.reducer({ room: t.string(), name: t.string(), hero: 
   const state: GameState = row ? JSON.parse(row.snapshot) : createGame(args.room, args.size);
   if (state.size !== args.size) throw new SenderError('Room team size differs.');
   if (state.phase !== 'playing') throw new SenderError('Match finished. Create a new room.');
-  if ([...ctx.db.membership.iter()].filter(m => m.room === args.room).length >= args.size * 2) throw new SenderError('Match is full.');
+  if ([...ctx.db.membership.iter()].filter(m => m.room === args.room).length >= 2) throw new SenderError('Match is full.');
   const draft: Draft = { ...args, name: args.name.trim().slice(0, 24) || 'Commander', hero: args.hero as Draft['hero'], companion: args.companion as Draft['companion'], size: args.size };
   const reserved = new Map<string, boolean>();
   for (const current of ctx.db.membership.iter()) {
@@ -75,6 +76,7 @@ export const restartMatch = db.reducer(ctx => {
   const row = ctx.db.match_state.room.find(member.room);
   if (!row) throw new SenderError('Match unavailable.');
   const prior: GameState = JSON.parse(row.snapshot);
+  if (prior.size !== 1) throw new SenderError('This room uses an old team size. Create a new 1v1 room.');
   const state = createGame(member.room, prior.size);
   for (const current of ctx.db.membership.iter()) {
     if (current.room !== member.room) continue;

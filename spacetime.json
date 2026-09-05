@@ -1,0 +1,11 @@
+{
+  "dev": {
+    "run": "npm run dev"
+  },
+  "database": "tiny-knights-prototype",
+  "module-path": "backend/spacetime/module/spacetimedb",
+  "server": "http://127.0.0.1:3005",
+  "generate": [
+    { "language": "typescript", "out-dir": "backend/spacetime/bindings" }
+  ]
+}

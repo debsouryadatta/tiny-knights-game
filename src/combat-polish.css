@@ -1,0 +1,19 @@
+@media (pointer: fine) {
+  #ui .combat-button kbd { display: block; font: 600 9px/1 system-ui,sans-serif; color: #f5ddb0; opacity: .85; }
+  #ui .attack kbd { top: 12px; right: 0; left: 0; text-align: center; }
+}
+#ui .cast-status {
+  position: absolute; top: 88px; left: 50%; transform: translateX(-50%);
+  width: 220px; padding: 11px 14px; border: 1px solid #73cbe266;
+  background: #091d30e6; color: #d8f6ff; border-radius: 5px;
+  text-align: center; box-shadow: 0 5px 18px #0003;
+}
+#ui .cast-status strong { display: block; font: 600 12px/1.4 system-ui,sans-serif; }
+#ui .cast-status span { display: block; margin-top: 3px; color: #bacedd; font: 10px/1.4 system-ui,sans-serif; }
+#ui .cast-meter { height: 3px; margin-top: 9px; background: #19374e; overflow: hidden; }
+#ui .cast-meter i { display: block; height: 100%; background: #92e9ff; transition: width .1s linear; }
+#ui .death-status { border-color: #e6b48055; }
+#ui .death-status .cast-meter i { background: #e4bb79; }
+@media (orientation: portrait) and (max-width: 600px) { #ui .cast-status { top: 250px; width: 190px; } }
+@media (orientation: landscape) and (max-height: 540px) { #ui .cast-status { top: 64px; width: 175px; padding: 7px 10px; } }
+@media (prefers-reduced-motion: reduce) { #ui .cast-meter i { transition: none; } }

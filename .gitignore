@@ -8,6 +8,8 @@ playwright-report/
 !.env.example
 *.log
 .DS_Store
+spacetime.local.json
+spacetime.*.local.json
 backend/spacetime/.runtime/
 backend/spacetime/.data/
 backend/spacetime/.tools/

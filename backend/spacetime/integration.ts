@@ -9,7 +9,7 @@ async function waitFor(test: () => boolean, label: string) {
 }
 async function connect(token?: string) {
   return new Promise<{ conn: DbConnection; token: string }>((resolve, reject) => {
-    const conn = DbConnection.builder().withUri(process.env.SPACETIME_TEST_URI || 'http://127.0.0.1:3005').withDatabaseName('tiny-knights-prototype').withToken(token)
+    const conn = DbConnection.builder().withUri(process.env.SPACETIME_TEST_URI || 'http://127.0.0.1:3005').withDatabaseName(process.env.SPACETIME_TEST_DATABASE || 'tiny-knights-prototype').withToken(token)
       .onConnect((c, _identity, nextToken) => {
         c.subscriptionBuilder().onApplied(() => resolve({ conn: c, token: nextToken }))
           .onError(ctx => reject(ctx.event)).subscribe([`SELECT * FROM match_state WHERE room = '${room}'`, 'SELECT * FROM my_session']);
@@ -18,10 +18,15 @@ async function connect(token?: string) {
   });
 }
 function state(conn: DbConnection) { const row = conn.db.matchState.room.find(room); return row ? JSON.parse(row.snapshot) : undefined; }
-const draft = { room, name: 'Host', hero: 'knight', companion: 'harvester', size: 2 };
+const draft = { room, name: 'Host', hero: 'knight', companion: 'harvester', size: 1 };
 try {
   const host = await connect();
+  for (const size of [0, 2, 3]) await assert.rejects(host.conn.reducers.joinMatch({ ...draft, size }), /1v1/i);
   await host.conn.reducers.joinMatch(draft);
+  await waitFor(() => state(host.conn)?.size === 1, '1v1 room');
+  assert.equal(state(host.conn).actors.filter((a: {kind:string}) => a.kind === 'hero').length, 2);
+  assert.equal(state(host.conn).actors.filter((a: {kind:string}) => a.kind === 'companion').length, 2);
+  assert.equal(state(host.conn).actors.filter((a: {kind:string;bot:boolean}) => a.kind === 'hero' && a.bot).length, 1);
   const guest = await connect();
   await guest.conn.reducers.joinMatch({ ...draft, name: 'Guest' });
   await waitFor(() => state(host.conn)?.actors.filter((a: { kind: string; bot: boolean }) => a.kind === 'hero' && !a.bot).length === 2, 'two players');
@@ -30,6 +35,10 @@ try {
   assert.ok(state(host.conn).structures.some((s: {kind:string;x:number;y:number}) => s.kind === 'core' && s.x === 8 && s.y === 56), 'New 64x64 map is deployed');
   const hostId = [...host.conn.db.mySession.iter()][0].playerId;
   const hero = state(host.conn).actors.find((a: {id:string})=>a.id===hostId);
+  const guestId = [...guest.conn.db.mySession.iter()][0].playerId;
+  assert.notEqual(hero.team, state(host.conn).actors.find((a: {id:string}) => a.id === guestId).team, 'Friends are opponents');
+  const third = await connect();
+  await assert.rejects(third.conn.reducers.joinMatch({ ...draft, name: 'Third' }), /full/i);
   await host.conn.reducers.issueCommand({type:'move',x:hero.x-1,y:hero.y,order:''});
   await waitFor(()=>state(guest.conn).actors.find((a: {id:string})=>a.id===hostId).x === hero.x-1,'movement replicated to guest');
   const control = (command: object) => host.conn.reducers.controlCommand({ payload: JSON.stringify(command) });
@@ -64,21 +73,16 @@ try {
   assert.ok(Math.abs(currentHero().x-burstStop)<.001,'Batched input does not leave movement running');
   await assert.rejects(guest.conn.reducers.restartMatch({}), /host/i);
   await host.conn.reducers.issueCommand({ type: 'order', x: 0, y: 0, order: 'escort' });
-  const guestId = [...guest.conn.db.mySession.iter()][0].playerId;
   guest.conn.disconnect();
   await waitFor(() => state(host.conn).actors.find((a: { id: string }) => a.id === guestId)?.bot === true, 'bot takeover');
-  const third = await connect();
-  await third.conn.reducers.joinMatch({ ...draft, name: 'Third' });
-  const thirdId = [...third.conn.db.mySession.iter()][0].playerId;
-  assert.notEqual(thirdId, guestId, 'New players cannot steal disconnected reserved slots');
+  await assert.rejects(third.conn.reducers.joinMatch({ ...draft, name: 'Third' }), /full/i);
   await host.conn.reducers.restartMatch({});
-  const resetThirdId = [...third.conn.db.mySession.iter()][0].playerId;
-  assert.notEqual(resetThirdId, [...host.conn.db.mySession.iter()][0].playerId);
   const resumed = await connect(guest.token);
   await resumed.conn.reducers.joinMatch({ ...draft, name: 'Ignored on resume' });
   const resumedId = [...resumed.conn.db.mySession.iter()][0].playerId;
   await waitFor(() => state(host.conn).actors.find((a: { id: string }) => a.id === resumedId)?.bot === false, 'resume');
-  assert.notEqual(resumedId, resetThirdId, 'Restart preserves unique reserved slots');
+  assert.notEqual(resumedId, [...host.conn.db.mySession.iter()][0].playerId, 'Restart preserves unique reserved slots');
+  await assert.rejects(third.conn.reducers.joinMatch({ ...draft, name: 'Third' }), /full/i);
   await host.conn.reducers.restartMatch({});
   await waitFor(() => state(host.conn).elapsed < 1, 'host restart');
   console.log('PASS: real SpacetimeDB two clients, continuous movement, simultaneous steer/attack/skill, release, validation, recall cancellation, scheduled ticks, non-host restart rejection, disconnect takeover, identity resume, host restart');

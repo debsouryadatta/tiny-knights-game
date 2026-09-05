@@ -2,6 +2,7 @@ import type {
   Actor,
   Command,
   Draft,
+  Effect,
   GameState,
   Order,
   Structure,
@@ -50,16 +51,41 @@ function effect(
   kind: GameState["effects"][number]["kind"],
   team: Team,
   target?: Vec,
+  metadata: Pick<Effect, 'sourceId' | 'targetId' | 'amount' | 'duration' | 'style' | 'abilitySlot'> = {},
 ) {
+  // The bounded queue length is not an event counter: bursts can exceed 60.
+  const prefix = `e${s.tick}-`;
+  const sequence = s.effects.reduce((next, e) => e.id.startsWith(prefix)
+    ? Math.max(next, Number(e.id.slice(prefix.length)) + 1 || 0) : next, 0);
+  const duration = metadata.duration ?? 0.7;
   s.effects.push({
-    ...p,
-    id: `e${s.tick}-${s.effects.length}`,
+    x: p.x,
+    y: p.y,
+    id: `${prefix}${sequence}`,
     kind,
     team,
-    ttl: 0.7,
+    ...metadata,
+    at: s.elapsed,
+    duration,
+    ttl: duration,
     target,
   });
   s.effects = s.effects.slice(-60);
+}
+function clearCombatControls(s: GameState, a: Actor) {
+  a.target = undefined;
+  a.steer = undefined;
+  a.attackHeld = false;
+  a.attackUntil = 0;
+  a.attackTargetId = undefined;
+  a.recallUntil = undefined;
+  a.sprintUntil = 0;
+  a.shieldUntil = 0;
+  const m = memory(s);
+  m.modes[a.id] = 'idle';
+  delete m.routes[a.id];
+  if (m.waypoints) delete m.waypoints[a.id];
+  // Keep inputSeq across death so delayed packets cannot resurrect old input.
 }
 function occupied(s: GameState, p: Vec, except?: string) {
   return (
@@ -105,17 +131,18 @@ function actor(
     hp,
     maxHp: hp,
     bot: true,
-    order: companion ? "gather" : "attack",
+    order: companion ? (companion === "harvester" ? "gather" : "escort") : "attack",
     cooldown: 0,
     abilityCooldown: 0,
     respawnAt: 0,
     kills: 0,
     gathered: 0,
     lastAction: "Ready",
-    lane: 0,
+    lane: 1,
   };
 }
-export function createGame(room: string, size: 2 | 3): GameState {
+export function createGame(room: string, size: number = 1): GameState {
+  if (size !== 1) throw new Error("Only 1v1 matches are supported.");
   const s: GameState = {
     room,
     size,
@@ -152,7 +179,7 @@ export function createGame(room: string, size: 2 | 3): GameState {
         nearestFree(s, spawnFor(team, i * 2)),
         (["knight", "ranger", "lancer"] as const)[i],
       );
-      a.lane = i;
+      a.lane = 1;
       s.actors.push(a);
       const c = actor(
         `${id}-agent`,
@@ -162,7 +189,7 @@ export function createGame(room: string, size: 2 | 3): GameState {
         (["harvester", "guardian", "scout"] as const)[i],
         id,
       );
-      c.lane = i;
+      c.lane = 1;
       s.actors.push(c);
     }
   }
@@ -170,23 +197,27 @@ export function createGame(room: string, size: 2 | 3): GameState {
   return s;
 }
 export function addPlayer(s: GameState, draft: Draft): string {
+  if (s.size !== 1 || draft.size !== 1) throw new Error("Only 1v1 matches are supported.");
   if (s.phase !== "playing") throw new Error("This match has ended.");
   const a = s.actors.find((a) => a.kind === "hero" && a.bot);
   if (!a) throw new Error("Match is full.");
-  a.bot = false;
-  a.name = (draft.name.trim() || "Commander").slice(0, 24);
-  a.hero = draft.hero;
-  a.maxHp = HERO_HP[draft.hero];
-  a.hp = a.maxHp;
-  a.protectedUntil=s.elapsed+SPAWN_PROTECTION;
-  a.order = "escort";
-  a.lastAction = "Awaiting your command";
+  // A friend takes over the bot's slot at base with fresh controls and cooldowns.
+  const fresh = actor(a.id, a.team, nearestFree(s, spawnFor(a.team, 0), a.id), draft.hero);
+  s.actors[s.actors.indexOf(a)] = fresh;
+  const m = memory(s);
+  delete m.routes[a.id];
+  if (m.waypoints) delete m.waypoints[a.id];
+  fresh.bot = false;
+  fresh.name = (draft.name.trim() || "Commander").slice(0, 24);
+  fresh.protectedUntil=s.elapsed+SPAWN_PROTECTION;
+  fresh.order = "escort";
+  fresh.lastAction = "Awaiting your command";
   memory(s).modes[a.id] = "idle";
-  const c = s.actors.find((c) => c.ownerId === a.id)!;
-  c.companion = draft.companion;
-  c.name = `${draft.companion} agent`;
-  c.maxHp = draft.companion === "guardian" ? 200 : 120;
-  c.hp = c.maxHp;
+  const c = s.actors.find((c) => c.kind === "companion" && c.ownerId === a.id)!;
+  s.actors[s.actors.indexOf(c)] = actor(c.id, a.team, nearestFree(s, spawnFor(a.team, 1), c.id), draft.hero, draft.companion, a.id);
+  delete m.routes[c.id];
+  delete m.modes[c.id];
+  if (m.waypoints) delete m.waypoints[c.id];
   return a.id;
 }
 function damage(
@@ -194,23 +225,30 @@ function damage(
   source: Actor | Structure,
   target: Actor | Structure,
   amount: number,
+  style: Effect['style'] = source.kind === 'core' || source.kind === 'tower' ||
+    ('hero' in source && (source.hero === 'ranger' || source.companion === 'scout'))
+    ? 'projectile' : 'melee',
 ) {
-  if (target.hp <= 0) return;
+  if (source.hp <= 0 || target.hp <= 0 || !Number.isFinite(amount) || amount <= 0) return 0;
   if ('respawnAt' in source) source.protectedUntil=0;
-  if ('respawnAt' in target && (target.protectedUntil??0)>s.elapsed) return;
+  if ('respawnAt' in target && (target.protectedUntil??0)>s.elapsed) return 0;
   if('recallUntil' in target)target.recallUntil=undefined;
   if('shieldUntil' in target && (target.shieldUntil??0)>s.elapsed)amount*=.45;
   if ("kind" in source && source.kind === "creep" && !("respawnAt" in target))
     amount *= 2.5;
   if (s.elapsed >= 480 && !("respawnAt" in target))
     amount *= 2 + Math.floor((s.elapsed - 480) / 120);
+  const previousHp = target.hp;
   target.hp = Math.max(0, target.hp - amount);
-  if('respawnAt' in target)target.lastDamage={sourceId:source.id,sourceName:'name' in source?source.name:`${source.team} ${source.kind}`,sourceKind:source.kind,amount:Math.round(amount),at:s.elapsed};
-  effect(s, source, "hit", source.team, { x: target.x, y: target.y });
+  const applied = previousHp - target.hp;
+  if('respawnAt' in target)target.lastDamage={sourceId:source.id,sourceName:'name' in source?source.name:`${source.team} ${source.kind}`,sourceKind:source.kind,amount:applied,at:s.elapsed};
+  const metadata = { sourceId: source.id, targetId: target.id, amount: applied, style };
+  effect(s, source, "hit", source.team, { x: target.x, y: target.y }, metadata);
   if (target.hp === 0) {
+    effect(s, target, 'death', target.team, undefined, metadata);
     if ("respawnAt" in target) {
       target.respawnAt = s.elapsed + (target.kind === "hero" ? 10 : 7);
-      target.target = undefined;
+      clearCombatControls(s, target);
       if ("kills" in source) source.kills++;
       s.bank[source.team].gold += target.kind === "hero" ? 15 : 5;
       if (target.kind !== "creep")
@@ -224,6 +262,7 @@ function damage(
       }
     }
   }
+  return applied;
 }
 function enemies(s: GameState, a: Actor | Structure): (Actor | Structure)[] {
   return [
@@ -351,7 +390,10 @@ export function applyCommand(
     }
     case 'regen': {
       if((a.regenCooldown??0)>0)return {ok:false,error:'Regen is cooling down.'};
-      a.recallUntil=undefined;a.regenCooldown=30;a.hp=Math.min(a.maxHp,a.hp+a.maxHp*.3);effect(s,a,'heal',a.team);a.lastAction='Regenerated';break;
+      const before=a.hp;
+      a.recallUntil=undefined;a.regenCooldown=30;a.hp=Math.min(a.maxHp,a.hp+a.maxHp*.3);
+      effect(s,a,'heal',a.team,undefined,{sourceId:a.id,targetId:a.id,amount:a.hp-before,duration:1.2,style:'magic'});
+      a.lastAction='Regenerated';break;
     }
     case "ability": {
       const slot=c.slot??1;if(![1,2,3].includes(slot))return {ok:false,error:'Unknown ability.'};
@@ -365,7 +407,7 @@ export function applyCommand(
       const origin={x:a.x,y:a.y};
       if(slot===1){
         const hit=new Set<string>();
-        const strike=()=>enemies(s,a).filter(e=>!hit.has(e.id)&&distance(a,e)<=.9).forEach(e=>{hit.add(e.id);damage(s,a,e,DASH_DAMAGE);});
+        const strike=()=>enemies(s,a).filter(e=>!hit.has(e.id)&&distance(a,e)<=.9).forEach(e=>{hit.add(e.id);damage(s,a,e,DASH_DAMAGE,'melee');});
         strike();
         // Check every tenth tile: never teleport through a wall, unit or tower.
         for(let travelled=0;travelled<DASH_DISTANCE-1e-6;travelled+=.1){
@@ -378,12 +420,12 @@ export function applyCommand(
       else {
         for(const e of enemies(s,a).filter(e=>distance(a,e)<=SHOCKWAVE_RADIUS)){
           const ex=e.x-a.x,ey=e.y-a.y,d=Math.hypot(ex,ey)||1;
-          damage(s,a,e,SHOCKWAVE_DAMAGE);
-          if('respawnAt' in e&&e.hp>0){moveContinuous(s,e,ex/d*SHOCKWAVE_PUSH,ey/d*SHOCKWAVE_PUSH);delete memory(s).routes[e.id];}
+          const applied = damage(s,a,e,SHOCKWAVE_DAMAGE,'magic');
+          if(applied>0&&'respawnAt' in e&&e.hp>0){moveContinuous(s,e,ex/d*SHOCKWAVE_PUSH,ey/d*SHOCKWAVE_PUSH);delete memory(s).routes[e.id];}
         }
         a.lastAction='Shockwave';
       }
-      effect(s,origin,'ability',a.team,{x:a.x,y:a.y});s.effects[s.effects.length-1].abilitySlot=slot;
+      effect(s,origin,'ability',a.team,{x:a.x,y:a.y},{sourceId:a.id,abilitySlot:slot,style:slot===1?'melee':'magic'});
       break;
     }
     default:
@@ -444,21 +486,40 @@ function nextStep(s: GameState, a: Actor, goal: Vec): Vec | undefined {
   m.routes[a.id] = { goal: dest, path };
   return path[0];
 }
+function minionTarget(s: GameState, a: Actor): Actor | Structure | undefined {
+  const nearby = enemies(s, a).filter(e => distance(a, e) <= 5);
+  const previous = nearby.find(e => e.id === a.attackTargetId);
+  // Engage a reachable opponent before pursuing one farther away. Keep a living
+  // target between ticks so small distance changes do not turn the wave around.
+  const local = nearby.find(e => distance(a, e) <= 1.6);
+  const target = previous && distance(a, previous) <= 1.6 ? previous : local ?? previous ??
+    nearby.find(e => e.kind === 'creep') ?? nearby[0];
+  a.attackTargetId = target?.id;
+  return target;
+}
 function pushTarget(s: GameState, a: Actor): Vec {
-  const local = enemies(s, a).find((e) => distance(a, e) < 9);
+  const local = a.kind === 'creep' ? minionTarget(s, a) : enemies(s, a).find((e) => distance(a, e) < 9);
   if (local) return local;
   const points = laneWaypoints(a.team, a.lane);
   const m = memory(s);
   m.waypoints ??= {};
   let index = m.waypoints[a.id];
   if (index === undefined) {
-    index = 0;
-    for (let i = 1; i < points.length; i++)
+    // Spawned units leave base directly instead of converging on their own core.
+    index = 1;
+    for (let i = 2; i < points.length; i++)
       if (distance(a, points[i]) < distance(a, points[index])) index = i;
   }
   if (distance(a, points[index]) < 3 && index < points.length - 1) index++;
   m.waypoints[a.id] = index;
-  return points[index] ?? baseFor(opposite(a.team));
+  const point = points[index] ?? baseFor(opposite(a.team));
+  if (a.kind !== 'creep' || index === points.length - 1) return point;
+  const prior = points[Math.max(0, index - 1)];
+  const dx = point.x - prior.x, dy = point.y - prior.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const offset = (a.formationSlot ?? 1) - 1;
+  const formation = { x: Math.round(point.x - dy / length * offset), y: Math.round(point.y + dx / length * offset) };
+  return isWalkable(formation.x, formation.y) ? formation : point;
 }
 export function stepGame(s: GameState, dt: number): void {
   if (s.phase !== "playing" || !Number.isFinite(dt) || dt <= 0) return;
@@ -491,22 +552,23 @@ export function stepGame(s: GameState, dt: number): void {
     Math.floor((s.elapsed - 45) / 30) > Math.floor((s.elapsed - dt - 45) / 30)
   ) {
     for (const team of ["blue", "red"] as Team[])
-      for (let lane = 0; lane < 3; lane++) {
+      for (const slot of [0, 1, 2] as const) {
         if (
           s.actors.filter((a) => a.kind === "creep" && a.team === team)
-            .length >= 24
+            .length >= 12
         )
           continue;
         const c = actor(
-          `creep-${team}-${lane}-${s.tick}`,
+          `creep-${team}-${slot}-${s.tick}`,
           team,
-          nearestFree(s, spawnFor(team, lane * 2)),
+          nearestFree(s, spawnFor(team, slot * 2)),
           "knight",
         );
         c.kind = "creep";
         c.name = "Lane soldier";
         c.hp = c.maxHp = CREEP_HP;
-        c.lane = lane;
+        c.lane = 1;
+        c.formationSlot = slot;
         c.order = "attack";
         s.actors.push(c);
       }
@@ -526,16 +588,22 @@ export function stepGame(s: GameState, dt: number): void {
         a.hp = a.maxHp;
         a.protectedUntil=s.elapsed+SPAWN_PROTECTION;
         a.lastAction = "Respawned";
-        a.steer=undefined;a.recallUntil=undefined;a.attackHeld=false;a.attackUntil=0;a.target=undefined;a.sprintUntil=0;a.shieldUntil=0;
-        delete m.routes[a.id];
-        if (m.waypoints) delete m.waypoints[a.id];
+        clearCombatControls(s, a);
+        a.respawnAt = 0;
+        effect(s,a,'respawn',a.team,undefined,{sourceId:a.id,targetId:a.id});
       }
       continue;
     }
     if (distance(a, baseFor(a.team)) < 5)
       a.hp = Math.min(a.maxHp, a.hp + dt * 10);
     if(a.recallUntil){
-      if(s.elapsed>=a.recallUntil){Object.assign(a,nearestFree(s,spawnFor(a.team,0),a.id));a.hp=a.maxHp;a.recallUntil=undefined;a.lastAction='Recalled to base';}
+      if(s.elapsed>=a.recallUntil){
+        const origin={x:a.x,y:a.y};
+        Object.assign(a,nearestFree(s,spawnFor(a.team,0),a.id));a.hp=a.maxHp;
+        clearCombatControls(s,a);a.lastAction='Recalled to base';
+        effect(s,origin,'recall',a.team,{x:a.x,y:a.y},{sourceId:a.id,targetId:a.id,style:'magic'});
+        continue;
+      }
       else continue;
     }
     const steering=a.steer&&a.steer.expiresAt>s.elapsed&&Math.hypot(a.steer.x,a.steer.y)>.01;
@@ -549,9 +617,15 @@ export function stepGame(s: GameState, dt: number): void {
             ? "attack"
             : "idle";
       const owner = s.actors.find((x) => x.id === a.ownerId);
-      if (a.order === "escort" && owner && owner.hp > 0)
-        a.target =
-          distance(a, owner) > 2 ? { x: owner.x, y: owner.y } : undefined;
+      if (a.order === "escort" && owner && owner.hp > 0) {
+        const separation = distance(a, owner);
+        if (separation < 1.5) {
+          // Leave room for the player's movement instead of body-blocking them.
+          const dx = (a.x - owner.x) / (separation || 1);
+          const dy = (a.y - owner.y) / (separation || 1);
+          a.target = nearestFree(s, { x: a.x + dx * 2, y: a.y + (separation ? dy * 2 : 2) }, a.id);
+        } else a.target = separation > 2.8 ? { x: owner.x, y: owner.y } : undefined;
+      }
       if (a.order === "defend")
         a.target =
           distance(a, baseFor(a.team)) > 5
@@ -625,8 +699,8 @@ export function stepGame(s: GameState, dt: number): void {
     const attacking=a.bot||a.kind!=='hero'||a.attackHeld||(a.attackUntil??0)>s.elapsed;
     if(!attacking&&!a.bot&&mode==='idle')a.target=undefined;
     const candidates=enemies(s,a);
-    const selected=candidates.find(e=>e.id===a.attackTargetId&&distance(a,e)<=8)??candidates.find(e=>distance(a,e)<=8);
-    const foe=attacking&&selected&&distance(a,selected)<=range?selected:undefined;
+    const selected=a.kind==='creep'?minionTarget(s,a):candidates.find(e=>e.id===a.attackTargetId&&distance(a,e)<=8)??candidates.find(e=>distance(a,e)<=8);
+    const foe=attacking ? (selected&&distance(a,selected)<=range?selected:candidates.find(e=>distance(a,e)<=range)) : undefined;
     if(attacking&&!a.bot&&a.kind==='hero'&&!steering&&selected&&!foe){a.target={x:Math.round(selected.x),y:Math.round(selected.y)};}
     if(attacking&&!selected&&!a.bot)a.lastAction='No target in range';
     if (foe && a.cooldown <= 0) {

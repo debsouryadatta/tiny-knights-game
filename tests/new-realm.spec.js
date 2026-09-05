@@ -6,7 +6,6 @@ async function join(page, room = `QA${Date.now().toString(36)}`) {
   await page.waitForFunction(() => window.realm?.state.ready);
   await page.locator('input[name="name"]').fill('Playtester');
   await page.locator('input[name="room"]').fill(room);
-  await page.locator('select[name="size"]').selectOption('2');
   await page.locator('#join').click();
   await page.waitForFunction(() => window.realm?.state.connected && window.realm.state.playerId);
   await expect(page.locator('#join-screen')).toBeHidden();
@@ -104,7 +103,7 @@ test('resource gathering and ability reach the authoritative simulation', async 
   await expect(page.locator('[data-action="build"]')).not.toHaveClass(/active/);
 });
 
-test('all resource sites and three lanes connect both bases', () => {
+test('all resource sites and the duel lane connect both bases', () => {
   const start = baseFor('blue');
   const visited = new Set([`${start.x},${start.y}`]);
   const queue = [start];
@@ -124,7 +123,7 @@ test('all resource sites and three lanes connect both bases', () => {
       const spawn = spawnFor(team, slot);
       expect(visited.has(`${spawn.x},${spawn.y}`), `${team} spawn ${slot}`).toBe(true);
     }
-    for (let lane = 0; lane < 3; lane++) {
+    for (const lane of [1]) {
       for (const point of laneWaypoints(team, lane)) expect(visited.has(`${point.x},${point.y}`), `${team} lane ${lane} waypoint`).toBe(true);
     }
   }

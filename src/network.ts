@@ -1,5 +1,6 @@
 import type { Command, Draft, GameState, ServerMessage, Session } from '../shared/types';
 import { SpacetimeGameClient } from './spacetime-client';
+import { plannerAvailable } from './connection-config';
 export interface GameConnection {
  state:GameState|null;session:Session|null;status:string;error:string|null;latency:number;
  plannerMode?:'deterministic'|'llm';
@@ -16,8 +17,11 @@ export class GameClient extends SpacetimeGameClient {
   super.join(draft);
   this.roundGeneration++;
   this.manualOrderAt=0;this.plannerMode='deterministic';
-  fetch('/api/health').then(r=>r.json()).then(data=>{this.plannerEnabled=data.companionMode==='llm';}).catch(()=>{this.plannerEnabled=false;});
-  this.plannerTimer=setInterval(()=>void this.plan(),30000);
+  this.plannerEnabled=false;
+  if(plannerAvailable){
+   fetch('/api/health').then(r=>r.json()).then(data=>{this.plannerEnabled=data.companionMode==='llm';}).catch(()=>{this.plannerEnabled=false;});
+   this.plannerTimer=setInterval(()=>void this.plan(),30000);
+  }
  }
  override command(command:Command){if(command.type==='order')this.manualOrderAt=Date.now();super.command(command);}
  private async plan(){

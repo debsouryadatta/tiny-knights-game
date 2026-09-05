@@ -1,6 +1,8 @@
 import { WORLD, files, bakeTerrain, drawObject, getVisibleObjects } from './world.js';
 import { getMoveSpeed, moveContinuous } from '../shared/movement';
 import { loadAssets } from './asset-loader.js';
+import { createCombatEffects } from './combat-effects.js';
+import { spawnFor } from '../shared/map';
 
 const TILE = 64;
 const colors = { blue: '#79c9ff', red: '#ef7972' };
@@ -9,10 +11,12 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export function createRenderer(canvas, options) {
   const ctx = canvas.getContext('2d', { alpha: false });
   const images = {}, tracks = new Map();
+  const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const combatEffects=createCombatEffects({reducedMotion});
   let terrain, minimapBase, stopped = false, request = 0, last = 0, time = 0;
   let width = 1, height = 1, scale = 1, dpr = 1, marker = null, hover = null;
   let camera = { x: WORLD.W / 2, y: WORLD.H / 2 }, snapped = false;
-  let lastTick = -1, drawn = 0, fps = 60;
+  let lastTick = -1, lastState = null, drawn = 0, fps = 60;
   let prediction = null, sequence = 0, commands = [], localInput = {x:0,y:0,at:0}, priorElapsed = 0;
   let history=[], correction={x:0,y:0}, minimumAckAge=Infinity, lastAck=-1, arrivalInterval=100, lastArrival=0;
   let contextLost=false, playable=false, finishReady, minimapGeneration=0;
@@ -92,9 +96,10 @@ export function createRenderer(canvas, options) {
       const length=Math.max(1,Math.hypot(command.x,command.y));
       command.x/=length;command.y/=length;
       localInput={x:command.x,y:command.y,at:performance.now()};
-      if(prediction){delete prediction.settleX;delete prediction.settleY;}
+      if(prediction) delete prediction.stopAck;
+      if(!command.x&&!command.y){correction={x:0,y:0};history=[];}
       commands.push({seq:command.seq,...localInput});commands=commands.slice(-40);
-    } else if(['move','recall','gather'].includes(command.type)){localInput={x:0,y:0,at:0};commands=[];history=[];correction={x:0,y:0};}
+    } else if(['move','recall','gather'].includes(command.type)||(command.type==='attack'&&!localInput.x&&!localInput.y)){localInput={x:0,y:0,at:0};commands=[];history=[];correction={x:0,y:0};}
   }
   function ring(x, y, radius, color, alpha = 1) {
     ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = 2 / scale;
@@ -105,34 +110,66 @@ export function createRenderer(canvas, options) {
     ctx.fillStyle = colors[team]; ctx.fillRect(x - size / 2, y, size * clamp(hp / max, 0, 1), 4);
   }
   function actorSprite(actor, track, local) {
-    const x = track.x, y = track.y, moving = track.moving;
-    const attacking=track.swingUntil>time;
-    const kind = actor.kind === 'companion' ? 'companion' : actor.hero || 'knight';
-    const image = images[`${actor.team}-${kind}-${attacking?'Attack':moving ? 'Run' : 'Idle'}`] || images[`${actor.team}-${kind}-Idle`];
-    const size = actor.kind === 'hero' ? 144 : actor.kind === 'companion' ? 106 : 104;
-    ctx.fillStyle = '#10241855'; ctx.beginPath(); ctx.ellipse(x, y + 1, size * .14, size * .055, 0, 0, Math.PI * 2); ctx.fill();
-    if (local) ring(x, y + 2, 24, '#fff0b0', .8);
-    if (actor.sprintUntil > (options.getState()?.elapsed || 0)) {
-      ring(x, y + 2, 29, '#bbf4ba', .65);
-      if (moving) {
-        ctx.strokeStyle = '#b8f5d2'; ctx.lineWidth = 2; ctx.globalAlpha = .65;
-        for (let i = 0; i < 3; i++) { const back = -track.face; ctx.beginPath(); ctx.moveTo(x + back * 18, y - 8 - i * 8); ctx.lineTo(x + back * (32 + i * 5), y - 8 - i * 8); ctx.stroke(); }
-        ctx.globalAlpha = 1;
-      }
+    const x=track.x,y=track.y,dead=actor.hp<=0;
+    const deathAge=dead?time-track.deadAt:0;
+    if(dead&&(!Number.isFinite(deathAge)||deathAge>1))return;
+    const moving=!dead&&track.moving,attacking=!dead&&track.swingUntil>time;
+    const kind=actor.kind==='companion'?'companion':actor.hero||'knight';
+    const pose=attacking?'Attack':moving?'Run':'Idle';
+    const image=images[`${actor.team}-${kind}-${pose}`]||images[`${actor.team}-${kind}-Idle`];
+    const baseSize=actor.kind==='hero'?164:actor.kind==='companion'?116:88;
+    const size=baseSize*(kind==='lancer'?320/192:1);
+    const anchor=kind==='lancer'?.61:.72;
+    ctx.save();
+    ctx.globalAlpha=dead?Math.max(0,1-deathAge):1;
+    ctx.fillStyle='#081a2655';ctx.beginPath();ctx.ellipse(x,y+2,baseSize*.14,baseSize*.055,0,0,Math.PI*2);ctx.fill();
+    if(!dead&&actor.kind==='hero'){
+      ctx.fillStyle=local?'#ffe8a519':`${colors[actor.team]}19`;
+      ctx.beginPath();ctx.ellipse(x,y+2,29,20,0,0,Math.PI*2);ctx.fill();
+      ring(x,y+2,29,local?'#fff0b0':colors[actor.team],.8);
+    }else if(!dead&&actor.kind==='companion'){
+      ctx.strokeStyle=colors[actor.team];ctx.lineWidth=2/scale;
+      ctx.beginPath();ctx.moveTo(x-18,y+3);ctx.lineTo(x,y+13);ctx.lineTo(x+18,y+3);ctx.stroke();
     }
-    if (image) {
-      const frameSize = image.height, count = Math.max(1, Math.floor(image.width / frameSize));
-      const frame = attacking?Math.min(count-1,Math.floor((time-track.swingAt)*count/.45)):Math.floor(time * (moving ? 10 : 6)) % count;
-      ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.scale(track.face, 1);
-      ctx.drawImage(image, frame * frameSize, 0, frameSize, frameSize, -size / 2, -size * .72, size, size); ctx.restore();
-    } else { ctx.fillStyle = colors[actor.team]; ctx.fillRect(x - 12, y - 30, 24, 30); }
-    if (local || actor.hp < actor.maxHp || options.getView().tactical) bar(x, y - 58, actor.hp, actor.maxHp, actor.team);
-    if(track.hurtUntil>time){ctx.fillStyle='#fff4dc';ctx.font='bold 16px system-ui';ctx.textAlign='center';ctx.fillText(`−${track.damage}`,x,y-80-(.6-(track.hurtUntil-time))*32);}
-    if(actor.recallUntil>(options.getState()?.elapsed||0)){ring(x,y,32+Math.sin(time*6)*3,'#72dcff');ring(x,y,45,'#72dcff',.4);}
-    if (local && !options.getView().tactical) {
-      ctx.font = '600 12px system-ui'; ctx.textAlign = 'center';
-      ctx.strokeStyle = '#102418'; ctx.lineWidth = 4; ctx.strokeText(actor.name, x, y - 67); ctx.fillStyle = '#fff7d7'; ctx.fillText(actor.name, x, y - 67);
+    if(!dead&&actor.sprintUntil>(options.getState()?.elapsed||0)&&moving){
+      ctx.save();ctx.strokeStyle='#b8f5d2';ctx.lineWidth=2;ctx.globalAlpha=.5;
+      for(let i=0;i<3;i++){const back=-track.face;ctx.beginPath();ctx.moveTo(x+back*18,y-8-i*8);ctx.lineTo(x+back*(30+i*6),y-8-i*8);ctx.stroke();}
+      ctx.restore();
     }
+    if(image){
+      const frameSize=image.height,count=Math.max(1,Math.floor(image.width/frameSize));
+      const attackProgress=clamp((time-track.swingAt)/.36,0,1);
+      const frame=dead?0:attacking?Math.min(count-1,Math.floor(attackProgress*count)):Math.floor(moving?(track.runPhase||0):time*5)%count;
+      const thrust=attacking&&!reducedMotion?Math.sin(attackProgress*Math.PI)*5:0;
+      ctx.save();ctx.translate(Math.round(x+track.face*thrust),Math.round(y));ctx.scale(track.face,1);
+      if(dead&&!reducedMotion){ctx.translate(0,5*deathAge);ctx.rotate(Math.min(1,deathAge/.25)*1.35);}
+      const hurtAge=time-(track.hurtAt??-10);
+      if(!dead&&hurtAge<.1)ctx.filter='brightness(1.8) saturate(.4)';
+      ctx.drawImage(image,frame*frameSize,0,frameSize,frameSize,-size/2,-size*anchor,size,size);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  // Draw status after scenery so tree canopies cannot hide a fighting hero's health.
+  function actorOverlay(actor, track, local) {
+    if (options.getView().tactical) return;
+    const hero = actor.kind === 'hero', companion = actor.kind === 'companion';
+    const x = track.x, y = track.y - (hero ? 64 : companion ? 43 : 34);
+    const size = hero ? 58 : companion ? 34 : 25;
+    ctx.save(); ctx.translate(x, y);
+    const uiScale = clamp(1 / scale, .8, 1.5); ctx.scale(uiScale, uiScale);
+    bar(0, 0, track.displayHp??actor.hp, actor.maxHp, actor.team, size);
+    if((track.displayHp??actor.hp)>actor.hp){ctx.fillStyle='#eaa478';ctx.fillRect(-size/2+size*actor.hp/actor.maxHp,0,size*((track.displayHp??actor.hp)-actor.hp)/actor.maxHp,4);}
+    if (hero) {
+      ctx.fillStyle = '#152521';
+      for (let i = 1; i < 4; i++) ctx.fillRect(-size / 2 + size * i / 4, 0, 1, 4);
+      ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#102418'; ctx.lineWidth = 3;
+      const label = local ? 'YOU' : String(actor.name || 'Rival').slice(0, 16);
+      ctx.strokeText(label, 0, -6); ctx.fillStyle = local ? '#fff0b0' : '#fff5e5'; ctx.fillText(label, 0, -6);
+
+    }
+    ctx.restore();
   }
   function structureSprite(s) {
     const image = images[`${s.team}-${s.kind}`], x = (s.x + .5) * TILE, y = (s.y + .5) * TILE;
@@ -152,7 +189,13 @@ export function createRenderer(canvas, options) {
     m.clearRect(0, 0, w, h); m.drawImage(minimapBase, 0, 0, w, h);
     if (!state) return;
     for (const s of state.structures) if (s.hp > 0) { m.fillStyle = colors[s.team]; m.fillRect((s.x + .5) / 64 * w - 2, (s.y + .5) / 64 * h - 2, s.kind === 'core' ? 6 : 3, s.kind === 'core' ? 6 : 3); }
-    for (const a of state.actors) if (a.hp > 0 && a.kind !== 'creep') { m.fillStyle = a.id === options.getPlayerId() ? '#fff4ba' : colors[a.team]; m.beginPath(); m.arc((a.x + .5) / 64 * w, (a.y + .5) / 64 * h, a.id === options.getPlayerId() ? 3.2 : 1.8, 0, Math.PI * 2); m.fill(); }
+    for (const a of state.actors) if (a.hp > 0) {
+      const x = (a.x + .5) / 64 * w, y = (a.y + .5) / 64 * h;
+      m.fillStyle = a.id === options.getPlayerId() ? '#fff4ba' : colors[a.team];
+      if (a.kind === 'creep') { m.fillRect(x - .75, y - .75, 1.5, 1.5); continue; }
+      m.beginPath(); m.arc(x, y, a.id === options.getPlayerId() ? 3.5 : a.kind === 'hero' ? 2.8 : 1.5, 0, Math.PI * 2); m.fill();
+      if (a.kind === 'hero') { m.strokeStyle = '#152521'; m.lineWidth = 1; m.stroke(); }
+    }
     m.strokeStyle = '#fff8cfaa'; m.lineWidth = 1;
     m.strokeRect((camera.x - width / scale / 2) / WORLD.W * w, (camera.y - height / scale / 2) / WORLD.H * h, width / scale / WORLD.W * w, height / scale / WORLD.H * h);
   }
@@ -164,11 +207,14 @@ export function createRenderer(canvas, options) {
     const state = options.getState(), view = options.getView();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#17242a'; ctx.fillRect(0, 0, width, height);
     if (!terrain) return;
-    scale = view.tactical || !state ? Math.min(width / WORLD.W, height / WORLD.H) * .94 : 1.22 * Math.max(.48, Math.min(1.12, width / (TILE * (width < height ? 11 : 20))));
-    if (state && state.tick !== lastTick) {
-      if(state.elapsed<priorElapsed || prediction?.id!==options.getPlayerId()){prediction=null;commands=[];history=[];correction={x:0,y:0};minimumAckAge=Infinity;lastAck=-1;localInput={x:0,y:0,at:0};tracks.clear();snapped=false;}
-      if(lastArrival)arrivalInterval=clamp(arrivalInterval*.85+(ms-lastArrival)*.15,75,220);
-      lastArrival=ms;
+    scale = view.tactical ? Math.min(width / WORLD.W, height / WORLD.H) * .94 : clamp(Math.min(width / (TILE * (width < height ? 10 : 18)), height / (TILE * 9)), .5, 1.3);
+    if (state && state !== lastState) {
+      lastState=state;
+      if(state.elapsed<priorElapsed || prediction?.id!==options.getPlayerId()){prediction=null;commands=[];history=[];correction={x:0,y:0};minimumAckAge=Infinity;lastAck=-1;localInput={x:0,y:0,at:0};tracks.clear();combatEffects.reset();snapped=false;}
+      if(state.tick!==lastTick){
+        if(lastArrival)arrivalInterval=clamp(arrivalInterval*.85+(ms-lastArrival)*.15,75,220);
+        lastArrival=ms;
+      }
       priorElapsed=state.elapsed;
       lastTick = state.tick;
       const active = new Set();
@@ -176,11 +222,22 @@ export function createRenderer(canvas, options) {
         active.add(a.id); const tx = (a.x + .5) * TILE, ty = (a.y + .5) * TILE;
         let t = tracks.get(a.id);
         if (!t) { t = { x: tx, y: ty, tx, ty, fromX:tx,fromY:ty,received:ms,hp:a.hp, face: a.team === 'blue' ? 1 : -1 }; tracks.set(a.id, t); }
-        if(a.hp<t.hp){t.damage=Math.round(t.hp-a.hp);t.hurtUntil=time+.6;}t.hp=a.hp;
-        if(a.cooldown>(t.cooldown||0)+.15&&a.lastAction==='In combat'){t.swingAt=time;t.swingUntil=time+.45;}t.cooldown=a.cooldown;
+        const died=a.hp<=0&&t.hp>0, revived=a.hp>0&&t.hp<=0;
+        if(died){t.deadAt=time;t.swingUntil=0;t.moving=false;}
+        if(revived){t.deadAt=undefined;t.spawnAt=time;}
+        if(a.hp<t.hp){t.damage=Math.round(t.hp-a.hp);t.hurtAt=time;t.hurtUntil=time+.65;}t.hp=a.hp;
+        const strike=state.effects.findLast(e=>e.kind==='hit'&&e.sourceId===a.id&&e.style!=='magic');
+        if(strike&&strike.id!==t.lastStrike){
+          t.lastStrike=strike.id;t.swingAt=time;t.swingUntil=time+.36;
+          if(strike.target&&Math.abs(strike.target.x-a.x)>.05)t.face=Math.sign(strike.target.x-a.x);
+        }else if(!strike&&a.cooldown>(t.cooldown||0)+.15&&a.lastAction==='In combat'){t.swingAt=time;t.swingUntil=time+.36;}
+        t.cooldown=a.cooldown;
         t.moving=Math.hypot(tx-t.tx,ty-t.ty)>1;
         if (Math.abs(tx - t.tx) > 1) t.face = tx > t.tx ? 1 : -1;
         const elapsed=state.elapsed-(t.elapsed??state.elapsed);
+        const displaced=Math.hypot(tx-t.tx,ty-t.ty)>TILE*(getMoveSpeed(a,state.elapsed)*Math.max(elapsed,0)+.25);
+        const forced=displaced||died||revived;
+        if(forced){t.fromX=t.x=tx;t.fromY=t.y=ty;t.vx=t.vy=0;}
         t.vx=elapsed>0?(tx-t.tx)/elapsed:0;t.vy=elapsed>0?(ty-t.ty)/elapsed:0;t.elapsed=state.elapsed;
         t.fromX=t.x;t.fromY=t.y;t.received=ms;t.duration=arrivalInterval;
         t.tx = tx; t.ty = ty;
@@ -189,19 +246,24 @@ export function createRenderer(canvas, options) {
           const ack=a.inputSeq??0, acknowledged=commands.find(c=>c.seq===ack);
           if(ack!==lastAck&&acknowledged){minimumAckAge=Math.min(minimumAckAge,ms-acknowledged.at);lastAck=ack;}
           commands=commands.filter(c=>c.seq>ack);
-          if(!prediction||Math.hypot(prediction.x-a.x,prediction.y-a.y)>5||a.hp<=0){prediction={id:a.id,x:a.x,y:a.y};history=[];correction={x:0,y:0};t.x=tx;t.y=ty;}
+          if(!prediction||forced||Math.hypot(prediction.x-a.x,prediction.y-a.y)>5||a.hp<=0){prediction={id:a.id,x:a.x,y:a.y};history=[];correction={x:0,y:0};t.x=tx;t.y=ty;}
           // Compare like-for-like times: a server snapshot is older than this frame.
           // Pulling the current prediction directly toward it creates WAN rubber-banding.
           const sampleAt=ms-clamp(Number.isFinite(minimumAckAge)?minimumAckAge/2:50,0,500);
           let before;for(let i=history.length-1;i>=0;i--)if(history[i].at<=sampleAt){before=history[i];break;}
           const after=history.find(p=>p.at>=sampleAt);
-          if(before&&after){
+          if(before&&after&&(localInput.x||localInput.y)){
             const f=after.at===before.at?0:(sampleAt-before.at)/(after.at-before.at);
             const ex=a.x-(before.x+(after.x-before.x)*f),ey=a.y-(before.y+(after.y-before.y)*f);
             correction=Math.hypot(ex,ey)>.16?{x:ex,y:ey}:{x:0,y:0};
           }
           const stoppedInput=localInput.at&&!localInput.x&&!localInput.y;
-          if(stoppedInput&&(a.inputSeq||0)>=sequence){prediction.settleX=a.x;prediction.settleY=a.y;}
+          if(stoppedInput&&(a.inputSeq||0)>=sequence&&prediction.stopAck!==sequence){
+            // Stop on release. Rebase once when that exact stop is acknowledged,
+            // rather than easing toward old snapshots for several more frames.
+            prediction.x=a.x;prediction.y=a.y;prediction.stopAck=sequence;
+            history=[];correction={x:0,y:0};t.moving=false;
+          }
           if(!localInput.at){prediction.x=a.x;prediction.y=a.y;history=[];correction={x:0,y:0};}
         }
       }
@@ -215,20 +277,35 @@ export function createRenderer(canvas, options) {
         moveContinuous(state,prediction,localInput.x*speed*dt,localInput.y*speed*dt);
         const blend=1-Math.exp(-dt/.18);
         if(localInput.x||localInput.y){moveContinuous(state,prediction,correction.x*blend,correction.y*blend);correction.x*=1-blend;correction.y*=1-blend;}
-        else if(prediction.settleX!==undefined){prediction.x+=(prediction.settleX-prediction.x)*blend;prediction.y+=(prediction.settleY-prediction.y)*blend;}
+
         t.x=(prediction.x+.5)*TILE;t.y=(prediction.y+.5)*TILE;t.moving=!!(localInput.x||localInput.y)&&Math.hypot(prediction.x-oldX,prediction.y-oldY)>.002;
         history.push({at:ms,x:prediction.x,y:prediction.y});while(history.length&&history[0].at<ms-2000)history.shift();
         if(localInput.x)t.face=Math.sign(localInput.x);
       }else{
+        const previousX=t.x,previousY=t.y;
         const age=ms-t.received,blend=clamp(age/(t.duration||100),0,1);
-        // Bridge a single late snapshot, but never extrapolate across a long outage.
-        const extra=clamp(age-(t.duration||100),0,60)/1000;
+        // Interpolate to known positions. Extrapolating beyond a stopped snapshot
+        // makes idle actors coast and then rewind when the next packet arrives.
+        const extra=0;
         t.x=t.fromX+(t.tx-t.fromX)*blend+(t.vx||0)*extra;t.y=t.fromY+(t.ty-t.fromY)*blend+(t.vy||0)*extra;
+        t.moving=t.hp>0&&Math.hypot(t.x-previousX,t.y-previousY)>.1;
         if(local&&prediction){prediction.x=t.x/TILE-.5;prediction.y=t.y/TILE-.5;}
       }
+      t.runPhase=(t.runPhase||0)+(t.moving?dt*10:0);
+      t.displayHp=(t.displayHp??t.hp)+(t.hp-(t.displayHp??t.hp))*(1-Math.exp(-dt/.2));
     }
+    combatEffects.update(state,time,tracks);
     const me = tracks.get(options.getPlayerId());
-    const target = view.tactical || !state ? { x: WORLD.W / 2, y: WORLD.H / 2 } : view.inspect || me || { x: WORLD.W * .16, y: WORLD.H * .8 };
+    const player = state?.actors.find(a => a.id === options.getPlayerId());
+    const spawn = spawnFor(player?.team || 'blue', 0);
+    const focus = me || { x: (spawn.x + .5) * TILE, y: (spawn.y + .5) * TILE };
+    // A fixed team-oriented offset cannot rotate or slide as lane waypoints change.
+    const lead = Math.min(90, width / scale * .07, height / scale * .12);
+    const direction=player?.team==='red'?-1:1;
+    const target = view.tactical ? { x: WORLD.W / 2, y: WORLD.H / 2 } : view.inspect || {
+      x: focus.x + direction * lead * .45,
+      y: focus.y - height / scale * .1
+    };
     if (!snapped && me) { camera = { x: me.x, y: me.y }; snapped = true; }
     // Local motion already reconciles; an extra camera lerp adds input latency.
     camera.x=target.x;camera.y=target.y;
@@ -236,8 +313,8 @@ export function createRenderer(canvas, options) {
     camera.x = hw >= WORLD.W / 2 ? WORLD.W / 2 : clamp(camera.x, hw, WORLD.W - hw);
     camera.y = hh >= WORLD.H / 2 ? WORLD.H / 2 : clamp(camera.y, hh, WORLD.H - hh);
     ctx.save(); ctx.translate(width / 2, height / 2); ctx.scale(scale, scale); ctx.translate(-camera.x, -camera.y);
-    terrain.draw(ctx,{left:camera.x-hw,top:camera.y-hh,right:camera.x+hw,bottom:camera.y+hh},view.tactical||!state);
-    if((view.tactical||!state)&&minimapBase)ctx.drawImage(minimapBase,0,0,WORLD.W,WORLD.H);
+    const terrainReady = terrain.draw(ctx,{left:camera.x-hw,top:camera.y-hh,right:camera.x+hw,bottom:camera.y+hh},view.tactical);
+    if(view.tactical&&minimapBase)ctx.drawImage(minimapBase,0,0,WORLD.W,WORLD.H);
     if(me&&!view.tactical){
       const actor=state?.actors.find(a=>a.id===options.getPlayerId());
       if(actor?.attackHeld || view.aim){
@@ -258,27 +335,27 @@ export function createRenderer(canvas, options) {
       ctx.fillStyle = r.kind === 'gold' ? '#e2bc58' : '#b8de86'; ctx.beginPath(); ctx.arc(x, y - 5, 5, 0, Math.PI * 2); ctx.fill();
     }
     const bounds = { left: camera.x - hw - 160, top: camera.y - hh - 160, right: camera.x + hw + 160, bottom: camera.y + hh + 180 };
-    const items = (view.tactical||!state?[]:getVisibleObjects(bounds)).map(o => ({ y: o.y, render: () => drawObject(ctx, images, o, time) }));
+    combatEffects.drawGround(ctx,{bounds,scale,tactical:view.tactical});
+    const items = (view.tactical?[]:getVisibleObjects(bounds)).map(o => ({ y: o.y, render: () => drawObject(ctx, images, o, time) }));
+    const visibleActors = [];
     if (state) {
       for (const s of state.structures) if (s.hp > 0) items.push({ y: (s.y + .5) * TILE, render: () => structureSprite(s) });
-      for (const a of state.actors) if (a.hp > 0) { const t = tracks.get(a.id); if (t && t.x >= bounds.left && t.x <= bounds.right && t.y >= bounds.top && t.y <= bounds.bottom) items.push({ y: t.y, render: () => actorSprite(a, t, a.id === options.getPlayerId()) }); }
-    }
-    items.sort((a, b) => a.y - b.y); drawn = items.length; for (const item of items) item.render();
-    if (state) for (const e of state.effects) {
-      const x = (e.x + .5) * TILE, y = (e.y + .5) * TILE;
-      ring(x, y, e.abilitySlot === 3 ? TILE * 3 : e.kind === 'ability' ? 50 : 22, e.kind === 'gather' ? '#efcf70' : colors[e.team], .75);
-      if(e.abilitySlot===3)ring(x,y,TILE*1.7,'#fff0b0',.6);
-      if (e.target) {
-        ctx.save(); ctx.strokeStyle = colors[e.team]; ctx.lineWidth = e.abilitySlot===1 ? 18 : 2; ctx.globalAlpha=e.abilitySlot===1?.35:1;
-        ctx.beginPath(); ctx.moveTo(x, y - 20); ctx.lineTo((e.target.x + .5) * TILE, (e.target.y + .5) * TILE - 20); ctx.stroke();
-        if(e.abilitySlot===1){ctx.lineWidth=3;ctx.globalAlpha=.9;ctx.strokeStyle='#fff3c3';ctx.stroke();}ctx.restore();
+      for (const a of state.actors) {
+        const t=tracks.get(a.id);
+        if(t&&(a.hp>0||time-t.deadAt<1)&&t.x>=bounds.left&&t.x<=bounds.right&&t.y>=bounds.top&&t.y<=bounds.bottom){
+          items.push({y:t.y,render:()=>actorSprite(a,t,a.id===options.getPlayerId())});
+          if(a.hp>0)visibleActors.push([a,t]);
+        }
       }
     }
+    items.sort((a, b) => a.y - b.y); drawn = items.length; for (const item of items) item.render();
+    combatEffects.drawOverlay(ctx,{bounds,scale,tactical:view.tactical});
     if (marker && time - marker.at < 1.5) ring((marker.x + .5) * TILE, (marker.y + .5) * TILE, 14 + (time - marker.at) * 8, '#fff0ad', 1 - (time - marker.at) / 1.5);
     if (view.buildMode && hover) { const x = (hover.x + .5) * TILE, y = (hover.y + .5) * TILE; ctx.fillStyle = '#f8d77c55'; ctx.fillRect(x - 32, y - 32, 64, 64); ring(x, y, TILE * 5, '#f3d080', .6); }
+    for (const [actor, track] of visibleActors) actorOverlay(actor, track, actor.id === options.getPlayerId());
     ctx.restore();
-    if(!playable)finishReady();
+    if(!playable && terrainReady)finishReady();
   }
   request = requestAnimationFrame(frame);
-  return { ready, screenToTile, screenToWorld, predictCommand, drawMap, setMarker: tile => { marker = { ...tile, at: time }; }, setHover: tile => { hover = tile; }, getStats: () => ({ fps: Math.round(fps), drawn, ready: !!terrain&&!contextLost, terrainChunks:terrain?.count??0, canvasPixels:canvas.width*canvas.height, camera: { ...camera }, scale, predicted:prediction?{x:prediction.x,y:prediction.y}:null, pendingInputs:commands.length }), destroy() { stopped = true; cancelAnimationFrame(request); resizeObserver.disconnect();canvas.removeEventListener('contextlost',onContextLost);canvas.removeEventListener('contextrestored',onContextRestored);terrain?.clear(); } };
+  return { ready, screenToTile, screenToWorld, predictCommand, drawMap, setMarker: tile => { marker = { ...tile, at: time }; }, setHover: tile => { hover = tile; }, getStats: () => ({ fps: Math.round(fps), drawn, ready: !!terrain&&!contextLost, terrainChunks:terrain?.count??0, canvasPixels:canvas.width*canvas.height, camera: { ...camera }, scale, predicted:prediction?{x:prediction.x,y:prediction.y}:null, pendingInputs:commands.length, effects:combatEffects.getStats(), localMoving:tracks.get(options.getPlayerId())?.moving??false, rendered:tracks.get(options.getPlayerId())?{x:tracks.get(options.getPlayerId()).x,y:tracks.get(options.getPlayerId()).y}:null }), destroy() { stopped = true; combatEffects.reset(); cancelAnimationFrame(request); resizeObserver.disconnect();canvas.removeEventListener('contextlost',onContextLost);canvas.removeEventListener('contextrestored',onContextRestored);terrain?.clear(); } };
 }

@@ -1,4 +1,5 @@
 import { DbConnection } from '../backend/spacetime/bindings';
+import { databaseName, databaseUri, sessionKey } from './connection-config';
 import type { Command, Draft, GameState, Session } from '../shared/types';
 
 /** Same public contract as GameClient. Real SpacetimeDB subscription transport. */
@@ -19,7 +20,7 @@ export class SpacetimeGameClient {
   join(draft: Draft) {
     this.disconnect();
     this.draft = { ...draft, room: (draft.room || Array.from(crypto.getRandomValues(new Uint8Array(3)),b=>b.toString(16).padStart(2,'0')).join('')).trim().toUpperCase() };
-    try { this.token = sessionStorage.getItem(`tiny-knights-session:${this.draft.room}`) ?? undefined; } catch { this.token = undefined; }
+    try { this.token = sessionStorage.getItem(sessionKey(this.draft.room)) ?? undefined; } catch { this.token = undefined; }
     this.state = null; this.session = null; this.error = null; this.stopped = false;
     this.connect();
   }
@@ -27,12 +28,11 @@ export class SpacetimeGameClient {
     if (this.stopped || !this.draft) return;
     this.status = this.token ? 'reconnecting' : 'connecting'; this.emit();
     const draft = this.draft;
-    const uri = import.meta.env.VITE_SPACETIME_URI || location.origin;
-    const connection = DbConnection.builder().withUri(uri).withDatabaseName('tiny-knights-prototype').withToken(this.token)
+    const connection = DbConnection.builder().withUri(databaseUri).withDatabaseName(databaseName).withToken(this.token)
       .onConnect((conn, _identity, token) => {
         if(this.stopped || this.connection !== conn){conn.disconnect();return;}
         this.token = token;
-        try { sessionStorage.setItem(`tiny-knights-session:${draft.room}`,token); } catch { /* Private browsing may disable storage. */ }
+        try { sessionStorage.setItem(sessionKey(draft.room!),token); } catch { /* Private browsing may disable storage. */ }
         const read = () => {
           const member = [...conn.db.mySession.iter()][0];
           if (member) { this.session = { playerId: member.playerId, room: member.room, token }; this.status = 'connected'; }
