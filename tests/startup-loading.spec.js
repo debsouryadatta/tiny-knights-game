@@ -19,7 +19,7 @@ test('native progress is visible before the game module arrives', async ({ page 
   try {
     await expect(page.locator('#loading')).toBeVisible();
     await expect(page.locator('#load-progress')).toBeVisible();
-    await expect(page.locator('#load-title')).toHaveText('Opening Little Realm');
+    await expect(page.locator('#load-title')).toHaveText('Opening Tiny Knights');
   } finally { release(); }
   await page.waitForFunction(() => window.realm?.state.ready);
 });

@@ -1,7 +1,25 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#081423"><title>Little Realm · 1v1 Duel</title><link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#081423"><title>Tiny Knights</title><link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>body{margin:0;background:#102329;color:#f5edcf;font-family:system-ui,sans-serif}#loading{box-sizing:border-box;margin:20vh auto;padding:24px;width:min(90%,420px);background:#142e35;border:1px solid #bca66b;border-radius:12px}#loading progress{width:100%;accent-color:#d6bb78}#loading button{font:inherit;padding:10px 16px}#loading [hidden]{display:none}</style>
-<link rel="stylesheet" href="/src/style.css"><link rel="stylesheet" href="/src/loading.css"></head><body>
-<canvas id="game" aria-label="Little Realm battlefield. Click to move; WASD to walk." tabindex="0"></canvas>
-<section id="loading" aria-label="Game loading"><div class="load-heading"><strong id="load-title">Opening Little Realm</strong><span id="load-count"></span></div><progress id="load-progress" aria-label="Essential artwork loading"></progress><p id="load-detail" role="status" aria-live="polite">Preparing the hero selection screen.</p><button id="load-retry" type="button" hidden onclick="location.reload()">Retry loading</button><noscript>This game needs JavaScript enabled to run.</noscript></section>
+<link rel="stylesheet" href="/src/style.css"><link rel="stylesheet" href="/src/loading.css"><meta name="description" content="One lane. One rival. Play Tiny Knights, a free browser duel with heroes, companions, and first-to-21 battles.">
+<link rel="canonical" href="https://tinyknights.fun/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Tiny Knights">
+<meta property="og:title" content="Tiny Knights">
+<meta property="og:description" content="One lane. One rival. Choose your hero and companion, then challenge a friend or find a rival.">
+<meta property="og:url" content="https://tinyknights.fun/">
+<meta property="og:image" content="https://tinyknights.fun/art/duel-lobby.png">
+<meta property="og:image:secure_url" content="https://tinyknights.fun/art/duel-lobby.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1536">
+<meta property="og:image:height" content="1024">
+<meta property="og:image:alt" content="A blue knight and companion approaching a red-bannered castle across a river.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Tiny Knights">
+<meta name="twitter:description" content="One lane. One rival. Choose your hero and companion, then challenge a friend or find a rival.">
+<meta name="twitter:image" content="https://tinyknights.fun/art/duel-lobby.png">
+<meta name="twitter:image:alt" content="A blue knight and companion approaching a red-bannered castle across a river.">
+</head><body>
+<canvas id="game" aria-label="Tiny Knights battlefield. Click to move; WASD to walk." tabindex="0"></canvas>
+<section id="loading" aria-label="Game loading"><div class="load-heading"><strong id="load-title">Opening Tiny Knights</strong><span id="load-count"></span></div><progress id="load-progress" aria-label="Essential artwork loading"></progress><p id="load-detail" role="status" aria-live="polite">Preparing the hero selection screen.</p><button id="load-retry" type="button" hidden onclick="location.reload()">Retry loading</button><noscript>This game needs JavaScript enabled to run.</noscript></section>
 <div id="ui"></div><script type="module" src="/src/main.js" onerror="document.getElementById('load-title').textContent='Game code could not load';document.getElementById('load-detail').textContent='Check your connection and retry.';document.getElementById('load-retry').hidden=false"></script></body></html>
