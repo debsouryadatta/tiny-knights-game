@@ -90,9 +90,8 @@ export function createUI({ client, audio, companionNeedle, onViewChange = () => 
   $('#companion-toggle').insertAdjacentHTML('afterend',`<form id="companion-command" class="companion-command"><label for="companion-line">Tell your squire</label><div class="companion-command-row"><input id="companion-line" name="line" maxlength="120" autocomplete="off" placeholder="come to me, go farm…"><button type="submit" id="companion-send">Say</button></div><small id="companion-needle-status">Needle loading…</small></form>`);
   const needleStatus=$('#companion-needle-status'),needleLine=$('#companion-line'),needleSend=$('#companion-send');
   const needleUnsub=companionNeedle?.subscribe(({status,error})=>{
-    needleStatus.textContent=status==='ready'?'Local Needle':status==='loading'?'Needle loading…':error||'Needle unavailable';
-    const blocked=status==='missing'||status==='error'||status==='unsupported';
-    needleLine.disabled=blocked;needleSend.disabled=blocked||status==='loading';
+    needleStatus.textContent=status==='ready'?'Local Needle':status==='loading'?'Needle loading…':error||'Phrase matching only';
+    needleSend.disabled=status==='loading';
   });
   if(!companionNeedle){$('#companion-command').hidden=true;}
   listen($('#companion-command'),'submit',async e=>{
