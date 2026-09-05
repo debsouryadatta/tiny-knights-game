@@ -232,15 +232,21 @@ export function createRenderer(canvas, options) {
           if(strike.target&&Math.abs(strike.target.x-a.x)>.05)t.face=Math.sign(strike.target.x-a.x);
         }else if(!strike&&a.cooldown>(t.cooldown||0)+.15&&a.lastAction==='In combat'){t.swingAt=time;t.swingUntil=time+.36;}
         t.cooldown=a.cooldown;
-        t.moving=Math.hypot(tx-t.tx,ty-t.ty)>1;
+        const positionChanged=tx!==t.tx||ty!==t.ty;
         if (Math.abs(tx - t.tx) > 1) t.face = tx > t.tx ? 1 : -1;
         const elapsed=state.elapsed-(t.elapsed??state.elapsed);
         const displaced=Math.hypot(tx-t.tx,ty-t.ty)>TILE*(getMoveSpeed(a,state.elapsed)*Math.max(elapsed,0)+.25);
         const forced=displaced||died||revived;
         if(forced){t.fromX=t.x=tx;t.fromY=t.y=ty;t.vx=t.vy=0;}
-        t.vx=elapsed>0?(tx-t.tx)/elapsed:0;t.vy=elapsed>0?(ty-t.ty)/elapsed:0;t.elapsed=state.elapsed;
-        t.fromX=t.x;t.fromY=t.y;t.received=ms;t.duration=arrivalInterval;
-        t.tx = tx; t.ty = ty;
+        // Commands broadcast state between simulation ticks, often with identical
+        // positions. Preserve the current segment's clock so those updates cannot
+        // repeatedly postpone movement. Health, effects and input acks still apply.
+        if(positionChanged||forced){
+          t.vx=elapsed>0?(tx-t.tx)/elapsed:0;t.vy=elapsed>0?(ty-t.ty)/elapsed:0;
+          t.fromX=t.x;t.fromY=t.y;t.received=ms;t.duration=arrivalInterval;
+          t.tx=tx;t.ty=ty;
+        }
+        t.elapsed=state.elapsed;
         if (Math.hypot(t.x - tx, t.y - ty) > TILE * 6) { t.x = t.fromX=tx; t.y = t.fromY=ty; }
         if(a.id===options.getPlayerId()){
           const ack=a.inputSeq??0, acknowledged=commands.find(c=>c.seq===ack);

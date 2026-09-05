@@ -1,5 +1,43 @@
 import {test,expect} from '@playwright/test';
 
+test('command-only snapshots do not delay interpolation or extend its stopping tail',async({page},info)=>{
+  test.skip(info.project.name!=='desktop');
+  await page.goto('/');
+  const result=await page.evaluate(async()=>{
+    const {createRenderer}=await import('/src/renderer.js');
+    const actor={id:'interpolation-fixture',name:'Remote',kind:'hero',hero:'knight',team:'blue',x:10,y:53,hp:660,maxHp:660,inputSeq:0};
+    const initial={tick:1,elapsed:0,actors:[actor],structures:[],resources:[],effects:[]};
+    let regular=initial,chatty=initial;
+    const canvases=[0,1].map(()=>{const c=document.createElement('canvas');c.style.cssText='width:400px;height:300px';document.body.append(c);return c;});
+    const make=(canvas,getState)=>createRenderer(canvas,{getState,getPlayerId:()=>actor.id,getView:()=>({})});
+    const baseline=make(canvases[0],()=>regular),duplicate=make(canvases[1],()=>chatty);
+    try{
+      await Promise.all([baseline.ready,duplicate.ready]);
+      let lastTick=0;const samples=[];
+      const start=performance.now();
+      await new Promise(resolve=>{
+        function sample(now){
+          const elapsed=now-start,tick=Math.floor(elapsed/100);
+          if(tick!==lastTick){
+            // 10Hz positions, then stop. Command updates arrive between ticks.
+            regular={...initial,tick:tick+1,elapsed:tick/10,actors:[{...actor,x:10+Math.min(tick,8)*.4}]};
+            chatty=regular;lastTick=tick;
+          }else{
+            chatty={...chatty,actors:chatty.actors.map(a=>({...a,inputSeq:(a.inputSeq||0)+1}))};
+          }
+          const a=baseline.getStats().rendered,b=duplicate.getStats().rendered;
+          if(a&&b&&elapsed>250)samples.push({at:elapsed,difference:Math.hypot(a.x-b.x,a.y-b.y),x:b.x});
+          if(elapsed>=1300)resolve();else requestAnimationFrame(sample);
+        }requestAnimationFrame(sample);
+      });
+      return {samples,maxDifference:Math.max(...samples.map(s=>s.difference)),stopRange:Math.max(...samples.filter(s=>s.at>1100).map(s=>s.x))-Math.min(...samples.filter(s=>s.at>1100).map(s=>s.x))};
+    }finally{baseline.destroy();duplicate.destroy();canvases.forEach(c=>c.remove());}
+  });
+  expect(result.samples.length).toBeGreaterThan(20);
+  expect(result.maxDifference).toBeLessThan(.01);
+  expect(result.stopRange).toBeLessThan(.01);
+});
+
 test('release freezes the hero immediately and acknowledged stop has no tail or camera slide',async({page},info)=>{
   test.skip(info.project.name!=='desktop');
   await page.goto('/');
