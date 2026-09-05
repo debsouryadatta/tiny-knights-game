@@ -1,4 +1,5 @@
 import { isWalkable } from '../shared/map';
+import { validateBuildPlacement } from '../shared/simulation';
 import { createMainActionHold, getMainAction } from './contextual-action.js';
 export function createInput(canvas, renderer, options) {
   const keys = new Set(),
@@ -119,6 +120,7 @@ export function createInput(canvas, renderer, options) {
   });
   listen(canvas, 'pointerdown', (e) => {
     if (disabled() || e.button > 2 || press) return;
+    renderer.setHover(renderer.screenToTile(e.clientX,e.clientY));
     const stats = renderer.getStats();
     press = {
       x: e.clientX,
@@ -151,7 +153,11 @@ export function createInput(canvas, renderer, options) {
       state = options.getState(),
       me = player();
     renderer.setMarker(tile);
-    if (options.getView().buildMode) return send({ type: 'build', ...tile });
+    if (options.getView().buildMode) {
+      const result=validateBuildPlacement(state,me,tile);
+      if(!result.ok){options.onBuildError?.(result.error);return;}
+      return send({ type: 'build', ...tile });
+    }
     const distance = (o) => Math.hypot(o.x - point.x, o.y - point.y);
     const enemy = [...state.actors, ...state.structures]
       .filter((a) => a.hp > 0 && a.team !== me.team && distance(a) < 1.1)

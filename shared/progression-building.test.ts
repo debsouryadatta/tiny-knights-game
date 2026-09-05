@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGame,addPlayer,applyCommand,stepGame,TOWER_COST} from './simulation';
+import {createGame,addPlayer,applyCommand,stepGame,TOWER_COST,validateBuildPlacement} from './simulation';
 import {attackDamage,HERO_XP_THRESHOLDS,heroMaxHp} from './balance';
 import {baseFor,spawnFor,isWalkable} from './map';
 import type {Actor,Command,GameState} from './types';
@@ -27,6 +27,30 @@ function startBuild(s:GameState,a:Actor) {
   }
   assert.fail('No legal build tile found');
 }
+
+test('build preview is pure and matches authoritative placement decisions',()=>{
+  const {s,a}=setup();
+  const before=JSON.stringify(s);
+  for(let y=Math.round(a.y)-6;y<=a.y+6;y++)for(let x=Math.round(a.x)-6;x<=a.x+6;x++){
+    const preview=validateBuildPlacement(s,a,{x,y});
+    const copy=JSON.parse(before);
+    assert.deepEqual(applyCommand(copy,a.id,{type:'build',x,y}),preview);
+  }
+  assert.equal(JSON.stringify(s),before,'preview never reserves tiles or charges resources');
+});
+
+test('build rejection explains structures, resources, reservations and occupied tiles',()=>{
+  const {s,a}=setup();const p=startBuild(s,a);a.buildChannel=undefined;
+  const structure={...p,id:'nearby',team:'blue' as const,kind:'tower' as const,hp:500,maxHp:500,cooldown:0};
+  s.structures=[structure];
+  assert.match(validateBuildPlacement(s,a,p).error!,/Too close to a structure/);
+  s.structures=[];s.resources=[{...p,id:'tree',kind:'wood',amount:100}];
+  assert.match(validateBuildPlacement(s,a,p).error!,/Too close to a resource/);
+  s.resources=[];s.actors.push({...a,id:'other',x:p.x,y:p.y});
+  assert.match(validateBuildPlacement(s,a,p).error!,/occupied/);
+  s.actors[1].buildChannel={...p,originX:p.x,originY:p.y,until:s.elapsed+2.5};
+  assert.match(validateBuildPlacement(s,a,p).error!,/Another tower/);
+});
 
 test('creep last hits award XP, hero last hits award more and increase only killer stats',()=>{
   const {s,a}=setup();const hp=a.maxHp,dmg=attackDamage(a);

@@ -80,6 +80,7 @@ const options = {
   getPlayerId: () => client.session?.playerId ?? null,
   getView: () => ui.getView(),
   onCommand: (command) => client.command(command),
+  onBuildError: (error) => ui.showBuildError(error),
   onLoadProgress: (progress) => ui.setLoadState(progress),
 };
 renderer = createRenderer(canvas, options);

@@ -3,6 +3,7 @@ import { getMoveSpeed, moveContinuous } from '../shared/movement';
 import { loadAssets } from './asset-loader.js';
 import { createCombatEffects } from './combat-effects.js';
 import { spawnFor } from '../shared/map';
+import { validateBuildPlacement } from '../shared/simulation';
 import { advanceRunPhase } from './sprite-motion.js';
 
 const TILE = 64;
@@ -14,6 +15,7 @@ export function createRenderer(canvas, options) {
   const images = {}, tracks = new Map(), actorsById=new Map();
   const scenery=[],drawItems=[],drawPool=[],visibleActors=[];
   const viewport={left:0,top:0,right:0,bottom:0};
+  let buildPreview={state:null,hero:null,tiles:[]};
   function queueDraw(y,kind,subject,track){
     const index=drawItems.length,item=drawPool[index]||(drawPool[index]={});
     item.y=y;item.kind=kind;item.subject=subject;item.track=track;drawItems.push(item);
@@ -390,7 +392,22 @@ export function createRenderer(canvas, options) {
     }
     combatEffects.drawOverlay(ctx,{bounds,scale,tactical:view.tactical});
     if (marker && time - marker.at < 1.5) ring((marker.x + .5) * TILE, (marker.y + .5) * TILE, 14 + (time - marker.at) * 8, '#fff0ad', 1 - (time - marker.at) / 1.5);
-    if (view.buildMode && hover) { const x = (hover.x + .5) * TILE, y = (hover.y + .5) * TILE; ctx.fillStyle = '#f8d77c55'; ctx.fillRect(x - 32, y - 32, 64, 64); ring(x, y, TILE * 5, '#f3d080', .6); }
+    if(view.buildMode&&state){
+      const builder=state.actors.find(a=>a.id===options.getPlayerId());
+      if(builder){
+        if(buildPreview.state!==state||buildPreview.hero!==builder.id){
+          const tiles=[];
+          for(let y=Math.ceil(builder.y-5);y<=builder.y+5;y++)for(let x=Math.ceil(builder.x-5);x<=builder.x+5;x++){
+            if(Math.hypot(x-builder.x,y-builder.y)>5)continue;
+            tiles.push({x,y,ok:validateBuildPlacement(state,builder,{x,y}).ok});
+          }
+          buildPreview={state,hero:builder.id,tiles};
+        }
+        for(const tile of buildPreview.tiles){ctx.fillStyle=tile.ok?'#65e2a13d':'#ec69692a';ctx.fillRect(tile.x*TILE+2,tile.y*TILE+2,TILE-4,TILE-4);}
+        ring((builder.x+.5)*TILE,(builder.y+.5)*TILE,TILE*5,'#f3d080',.6);
+        if(hover){const valid=validateBuildPlacement(state,builder,hover).ok;ctx.strokeStyle=valid?'#65e2a1':'#ff7979';ctx.lineWidth=3/scale;ctx.strokeRect(hover.x*TILE+2,hover.y*TILE+2,TILE-4,TILE-4);}
+      }
+    }else buildPreview={state:null,hero:null,tiles:[]};
     for(let i=0;i<visibleActors.length;i+=2)actorOverlay(visibleActors[i],visibleActors[i+1],visibleActors[i].id===options.getPlayerId());
     ctx.restore();
     if(!playable && terrainReady)finishReady();

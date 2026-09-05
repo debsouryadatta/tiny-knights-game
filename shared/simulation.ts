@@ -319,26 +319,22 @@ function completeBuild(s:GameState,a:Actor) {
   a.lastAction='Tower built';
   log(s,`${a.name} built a tower`);
 }
-function build(
+export function validateBuildPlacement(
   s: GameState,
   a: Actor,
   p: Vec,
 ): { ok: boolean; error?: string } {
+  if(s.phase!=='playing')return {ok:false,error:'Match finished.'};
+  if(a.hp<=0)return {ok:false,error:'Wait for respawn.'};
   if(a.buildChannel)return {ok:false,error:'Already building a tower.'};
   if (!Number.isInteger(p.x) || !Number.isInteger(p.y) || !isWalkable(p.x, p.y))
     return { ok: false, error: "Choose a land tile." };
   if (distance(a, p) > 5)
     return { ok: false, error: "Move within 5 tiles to build." };
-  if (
-    !free(s, p) ||
-    s.resources.some((r) => distance(r, p) < 2) ||
-    s.structures.some((t) => t.hp > 0 && distance(t, p) < 4) ||
-    s.actors.some((other)=>other.buildChannel&&distance(other.buildChannel,p)<4)
-  )
-    return {
-      ok: false,
-      error: "Keep 4 tiles from structures and 2 from resources.",
-    };
+  if(s.structures.some(t=>t.hp>0&&distance(t,p)<4))return {ok:false,error:'Too close to a structure. Choose a tile at least 4 tiles away.'};
+  if(s.actors.some(other=>other.buildChannel&&distance(other.buildChannel,p)<4))return {ok:false,error:'Another tower is being built nearby. Keep 4 tiles away.'};
+  if(s.resources.some(r=>distance(r,p)<2))return {ok:false,error:'Too close to a resource. Choose a tile at least 2 tiles away.'};
+  if(!free(s,p))return {ok:false,error:'This tile is occupied. Choose an empty land tile.'};
   if (
     s.structures.filter(
       (t) => t.team === a.team && t.kind === "tower" && t.hp > 0,
@@ -348,6 +344,12 @@ function build(
   const b = s.bank[a.team];
   if (b.wood < TOWER_COST.wood || b.gold < TOWER_COST.gold)
     return { ok: false, error: "Tower costs 80 wood + 40 gold." };
+  return {ok:true};
+}
+function build(s:GameState,a:Actor,p:Vec):{ok:boolean;error?:string} {
+  const result=validateBuildPlacement(s,a,p);
+  if(!result.ok)return result;
+  const b=s.bank[a.team];
   b.wood -= TOWER_COST.wood;
   b.gold -= TOWER_COST.gold;
   clearCombatControls(s,a);

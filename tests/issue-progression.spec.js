@@ -7,7 +7,8 @@ async function fixture(page){
   await page.goto('/');
   await page.evaluate(async()=>{
     await import('/src/combat-polish.css');
-    const {createGame,addPlayer,applyCommand,stepGame}=await import('/shared/simulation.ts');
+    const {createGame,addPlayer,applyCommand,stepGame,validateBuildPlacement}=await import('/shared/simulation.ts');
+    const {createInput}=await import('/src/input.js');
     const {createUI}=await import('/src/ui.js');
     const {createRenderer}=await import('/src/renderer.js');
     let state=createGame('LOCAL-FIXTURE');
@@ -22,12 +23,19 @@ async function fixture(page){
     const audio={getStats:()=>({enabled:true,busy:false}),subscribe:()=>()=>{},toggle:async()=>{},setVolume:()=>{}};
     ui=createUI({client,audio});ui.setReady(true);publish();
     const renderer=createRenderer(document.querySelector('#game'),{getState:()=>state,getPlayerId:()=>id,getView:()=>ui.getView()});
+    createInput(document.querySelector('#game'),renderer,{getState:()=>state,getPlayerId:()=>id,getView:()=>ui.getView(),onCommand:command,onBuildError:error=>ui.showBuildError(error)});
     await renderer.ready;
     const g=document.querySelector('#game').getContext('2d'),originalText=g.fillText.bind(g),texts=[];
     g.fillText=(text,...args)=>{texts.push(String(text));if(texts.length>500)texts.splice(0,250);return originalText(text,...args);};
     const step=seconds=>{for(let i=0;i<Math.round(seconds*10);i++)stepGame(state,.1);publish();};
     window.issueFixture={
       state:()=>state,actor,command,step,texts,
+      placementTarget(valid){
+        const a=actor();let tile={x:Math.round(a.x),y:Math.round(a.y)};
+        if(valid){let found=false;for(let y=Math.round(a.y)-2;y<=a.y+2&&!found;y++)for(let x=Math.round(a.x)-2;x<=a.x+2;x++)if(validateBuildPlacement(state,a,{x,y}).ok){tile={x,y};found=true;break;}}
+        const {camera,scale}=renderer.getStats();
+        return {x:innerWidth/2+((tile.x+.5)*64-camera.x)*scale,y:innerHeight/2+((tile.y+.5)*64-camera.y)*scale};
+      },
       change(values){Object.assign(actor(),values);publish();},
       roundtrip(){state=JSON.parse(JSON.stringify(state));publish();},
       kill(kind,bot=false){
@@ -43,6 +51,26 @@ async function fixture(page){
   });
   await expect(page.locator('#join-screen')).toBeHidden();
 }
+
+test('build mode explains occupied tiles and builds from a valid preview tile',async({page},info)=>{
+  await fixture(page);
+  await page.locator('[data-action="build"]').click();
+  await expect(page.locator('#message')).toContainText('green tile');
+  const blocked=await page.evaluate(()=>window.issueFixture.placementTarget(false));
+  await page.mouse.click(blocked.x,blocked.y);
+  await expect(page.locator('#message')).toContainText('occupied');
+  await expect(page.locator('#message')).not.toContainText('SenderError');
+  expect(await page.evaluate(()=>window.issueFixture.actor().buildChannel)).toBeUndefined();
+  expect(await page.evaluate(()=>window.issueFixture.state().bank.blue)).toEqual({wood:800,gold:400});
+  const valid=await page.evaluate(()=>window.issueFixture.placementTarget(true));
+  await page.mouse.move(valid.x,valid.y);
+  await page.screenshot({path:info.outputPath('build-placement.png')});
+  await page.mouse.click(valid.x,valid.y);
+  expect(await page.evaluate(()=>Boolean(window.issueFixture.actor().buildChannel))).toBe(true);
+  await page.evaluate(()=>window.issueFixture.step(2.6));
+  expect(await page.evaluate(()=>window.issueFixture.state().structures.filter(s=>s.kind==='tower').length)).toBe(1);
+  expect(await page.evaluate(()=>window.issueFixture.state().bank.blue)).toEqual({wood:720,gold:360});
+});
 
 test('#15 kill progression appears in HUD and survives a snapshot round-trip',async({page},info)=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));await fixture(page);
