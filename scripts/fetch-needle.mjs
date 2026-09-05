@@ -1,9 +1,19 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SOURCE = 'https://huggingface.co/Cactus-Compute/needle2/resolve/main/needle2.cact';
 const dest = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'needle2.cact');
+
+try {
+  const existing = await stat(dest);
+  if (existing.size >= 1_000_000) {
+    console.log(`Using existing ${dest} (${existing.size} bytes)`);
+    process.exit(0);
+  }
+} catch {
+  // File is absent or unreadable; download below.
+}
 
 const response = await fetch(SOURCE);
 if (!response.ok) {
