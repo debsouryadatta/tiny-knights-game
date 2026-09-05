@@ -1,3 +1,6 @@
+import { createWorldAmbience } from './audio/ambience.js';
+import { createGameplayAudio } from './audio/gameplay.js';
+import { createAudioEngine } from './audio/engine.js';
 import { GameClient } from './network.ts';
 import './duel-lobby.css';
 import './combat-polish.css';
@@ -8,6 +11,11 @@ import { WIDTH, HEIGHT, TILE, isWalkable } from '../shared/map.ts';
 
 const canvas = document.querySelector('#game');
 const client = new GameClient();
+const audio = createAudioEngine();
+const ambience = createWorldAmbience(audio);
+const gameplayAudio = createGameplayAudio(audio, {
+  onPosition: (position) => ambience.update(position),
+});
 let renderer;
 let disposed = false,
   queuedJoin = null;
@@ -29,11 +37,27 @@ client.command = (command) => {
   renderer?.predictCommand?.(command);
   sendCommand(command);
 };
-const ui = createUI({ client, onViewChange: () => {} });
-const refresh = () =>
+const ui = createUI({ client, audio, onViewChange: () => {} });
+const refresh = () => {
+  gameplayAudio.snapshot(
+    client.state,
+    client.session,
+    client.status,
+    document.hidden,
+  );
   ui.update(client.state, client.session, client.status, client.error);
+};
+const visibility = () =>
+  gameplayAudio.snapshot(
+    client.state,
+    client.session,
+    client.status,
+    document.hidden,
+  );
+document.addEventListener('visibilitychange', visibility);
 const unsubscribe = client.subscribe(refresh);
 const options = {
+  onLocalMotion: (motion) => gameplayAudio.frame(motion),
   getState: () => client.state,
   getPlayerId: () => client.session?.playerId ?? null,
   getView: () => ui.getView(),
@@ -57,6 +81,8 @@ renderer.ready
   });
 window.addEventListener('pagehide', () => {
   disposed = true;
+  document.removeEventListener('visibilitychange', visibility);
+  audio.destroy();
   client.disconnect();
 });
 window.addEventListener('pageshow', (event) => {
@@ -65,6 +91,8 @@ window.addEventListener('pageshow', (event) => {
 if (import.meta.hot)
   import.meta.hot.dispose(() => {
     disposed = true;
+    document.removeEventListener('visibilitychange', visibility);
+    audio.destroy();
     clearInterval(mapTimer);
     unsubscribe();
     client.disconnect();
@@ -75,6 +103,13 @@ if (import.meta.hot)
 
 // Read-only, non-secret playtest telemetry. No identity tokens or command API exposed.
 window.realm = {
+  get audio() {
+    return {
+      ...audio.getStats(),
+      ...gameplayAudio.getStats(),
+      ambience: ambience.getStats(),
+    };
+  },
   get state() {
     const me = client.state?.actors.find(
       (a) => a.id === client.session?.playerId,

@@ -275,12 +275,15 @@ export function createRenderer(canvas, options) {
       }
       for (const id of tracks.keys()) if (!active.has(id)) tracks.delete(id);
     }
+    let audioDistance=0,audioMoving=false;
     for (const [id,t] of tracks) {
+      const priorX=t.x,priorY=t.y;
       const local=id===options.getPlayerId(), controlled=local&&prediction&&localInput.at&&(ms-localInput.at<350||!localInput.x&&!localInput.y);
       if(controlled && state?.actors.find(a=>a.id===id)?.hp>0){
         const oldX=prediction.x,oldY=prediction.y;
         const speed = getMoveSpeed(state.actors.find(a=>a.id===id), state.elapsed);
         moveContinuous(state,prediction,localInput.x*speed*dt,localInput.y*speed*dt);
+        if(local){audioDistance=Math.hypot(prediction.x-oldX,prediction.y-oldY);audioMoving=!!(localInput.x||localInput.y);}
         const blend=1-Math.exp(-dt/.18);
         if(localInput.x||localInput.y){moveContinuous(state,prediction,correction.x*blend,correction.y*blend);correction.x*=1-blend;correction.y*=1-blend;}
 
@@ -295,6 +298,7 @@ export function createRenderer(canvas, options) {
         const extra=0;
         t.x=t.fromX+(t.tx-t.fromX)*blend+(t.vx||0)*extra;t.y=t.fromY+(t.ty-t.fromY)*blend+(t.vy||0)*extra;
         t.moving=t.hp>0&&Math.hypot(t.x-previousX,t.y-previousY)>.1;
+        if(local){audioDistance=Math.hypot(t.x-priorX,t.y-priorY)/TILE;audioMoving=audioDistance>.002&&age<250;}
         if(local&&prediction){prediction.x=t.x/TILE-.5;prediction.y=t.y/TILE-.5;}
       }
       t.runPhase=(t.runPhase||0)+(t.moving?dt*10:0);
@@ -302,6 +306,7 @@ export function createRenderer(canvas, options) {
     }
     combatEffects.update(state,time,tracks);
     const me = tracks.get(options.getPlayerId());
+    if(me)options.onLocalMotion?.({x:me.x/TILE-.5,y:me.y/TILE-.5,distance:audioDistance,moving:audioMoving,now:ms});
     const player = state?.actors.find(a => a.id === options.getPlayerId());
     const spawn = spawnFor(player?.team || 'blue', 0);
     const focus = me || { x: (spawn.x + .5) * TILE, y: (spawn.y + .5) * TILE };

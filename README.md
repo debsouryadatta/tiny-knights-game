@@ -8,6 +8,8 @@ Run `npm install` then `npm run dev -- --port 4177`. Open http://localhost:4177.
 
 Current controls: WASD/arrows or joystick for continuous movement, hold Space/Attack to attack, Q/E/F for three skills, R recall, T regen, C gather, B tower placement, M overview, G grid, Escape cancel. Tap an enemy to target it. Drag a skill to aim and release to cast; drag toward Cancel to abort. Recall takes three seconds and movement or damage interrupts it. Landscape is recommended; fullscreen support varies by browser/OS.
 
+Click the music-note button to enable sound. The controls dialog has independent ambience and sound-effect volume sliders; muting preserves their values for the current page session. Seven Pixel Combat clips accompany footsteps, hits, abilities, gathering, and building. Synthesized river, forest, and base ambience follows the hero's position. Sound stops while the page is hidden, disconnected, or the hero is dead. This release includes ambience and effects, with no separate music track. Asset attribution and preparation notes are in `public/audio/README.md`.
+
 The top-right Ping indicator measures an application round trip over the live SpacetimeDB socket, including server response time. It uses a temporary read-only session subscription about every three seconds, even while idle. Green means under 100 ms, amber 100–199 ms, and red 200 ms or more. A three-second timeout shows `Ping >3s`; reconnecting hides the old measurement. This is not FPS, Vercel load time, or an ICMP network-only measurement.
 
 ### SpacetimeDB development

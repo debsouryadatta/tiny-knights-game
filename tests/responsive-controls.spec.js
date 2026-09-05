@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 const sizes=[[1600,720],[844,390],[390,844]];
-const controls=['#joystick','#map-button','#grid-toggle','#fullscreen','#help','#companion-toggle',
+const controls=['#joystick','#map-button','#sound','#grid-toggle','#fullscreen','#help','#companion-toggle',
   '[data-action="attack"]','[data-slot="1"]','[data-slot="2"]','[data-slot="3"]',
   '[data-action="recall"]','[data-action="regen"]','[data-action="gather"]','[data-action="build"]'];
 
