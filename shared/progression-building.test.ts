@@ -39,7 +39,7 @@ test('creep last hits award XP, hero last hits award more and increase only kill
 });
 test('hero level caps and persists across snapshots, death and old snapshot normalization',()=>{
   const {s,a}=setup();
-  for(let i=0;i<35;i++)kill(s,a,'hero');
+  for(let i=0;i<100;i++)kill(s,a,'creep');
   assert.equal(a.level,10);assert.equal(a.xp,HERO_XP_THRESHOLDS[9]);assert.equal(a.maxHp,heroMaxHp(a.hero,10));
   const copy:GameState=JSON.parse(JSON.stringify(s));run(copy,.1);
   assert.equal(copy.actors[0].level,10);assert.equal(copy.actors[0].xp,a.xp);

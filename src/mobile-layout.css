@@ -10,6 +10,8 @@
   --hud-bottom: max(24px, var(--safe-bottom));
 }
 .hero-stack { display: contents; }
+#ui #xp-progress { height: 2px; margin-top: 3px; background: #071523; overflow: hidden; border-radius: 1px; }
+#ui #xp-bar { display: block; width: 100%; height: 100%; background: #f3ce69; transform: scaleX(0); transform-origin: left; }
 .waiting-actions { display: grid; gap: 10px; }
 .waiting-actions #lobby-leave { margin-top: 0; }
 .draft-room { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }

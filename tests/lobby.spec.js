@@ -42,7 +42,7 @@ test('friend joins waiting room, readies, starts with host, and reconnects',asyn
 });
 
 test('Quick Play joins a public game and resumes the same identity',async({page})=>{
- await page.goto('/');await page.locator('#quick-play').click();await expect(page.locator('#join-screen')).toBeHidden();
+ await page.goto('/');await page.locator('#quick-play').click();await expect(page.locator('#join-screen')).toBeHidden({timeout:25000});
  await expect(page.locator('#connection')).toHaveText('Public match');
  const session=await page.evaluate(()=>({id:window.realm.state.playerId,room:window.realm.state.room}));
  await page.reload();await page.locator('#quick-play').click();await expect(page.locator('#join-screen')).toBeHidden();

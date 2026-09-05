@@ -55,7 +55,7 @@ test('#15 kill progression appears in HUD and survives a snapshot round-trip',as
   await expect(page.locator('#hero-class')).toHaveText('knight · Lv 2');
   await expect(page.locator('#kills')).toHaveText('2 defeats');
   // Portrait folds personal defeats into the always-visible 1v1 scoreboard.
-  await expect(page.locator('#blue-score')).toHaveText('2');
+  await expect(page.locator('#blue-score')).toHaveText('1');
   await expect(page.locator('#blue-score')).toBeVisible();
   expect(await page.evaluate(()=>window.issueFixture.actor().maxHp)).toBeGreaterThan(660);
   await page.evaluate(()=>window.issueFixture.roundtrip());
@@ -65,6 +65,39 @@ test('#15 kill progression appears in HUD and survives a snapshot round-trip',as
   expect(await page.evaluate(()=>window.issueFixture.actor().xp)).toBe(225);
   await page.screenshot({path:info.outputPath('level-and-defeats.png')});
   expect(errors).toEqual([]);
+});
+
+test('thin XP bar tracks this level, resets on level-up and fills at cap',async({page},info)=>{
+  await fixture(page);
+  const bar=page.locator('#xp-progress');
+  await expect(bar).toBeVisible();
+  await expect(bar).toHaveAttribute('aria-valuenow','0');
+  await page.evaluate(()=>window.issueFixture.kill('creep'));
+  await expect(bar).toHaveAttribute('aria-valuenow','25');
+  await expect(bar).toHaveAttribute('aria-valuetext','75 XP to level 2');
+  await page.evaluate(()=>window.issueFixture.change({level:2,xp:100}));
+  await expect(bar).toHaveAttribute('aria-valuenow','0');
+  await page.evaluate(()=>window.issueFixture.change({level:2,xp:170}));
+  await expect(bar).toHaveAttribute('aria-valuenow','50');
+  expect(await page.locator('#xp-bar').evaluate(el=>getComputedStyle(el).transform)).toBe('matrix(0.5, 0, 0, 1, 0, 0)');
+  const box=await bar.boundingBox();expect(box.height).toBe(2);expect(box.width).toBeGreaterThan(80);
+  await page.screenshot({path:info.outputPath('xp-progress.png')});
+  await page.evaluate(()=>{window.issueFixture.roundtrip();});
+  await expect(bar).toHaveAttribute('aria-valuenow','50');
+  await page.evaluate(()=>window.issueFixture.change({level:10,xp:2340}));
+  await expect(bar).toHaveAttribute('aria-valuenow','100');
+  await expect(bar).toHaveAttribute('aria-valuetext','Maximum level');
+});
+
+test('21st hero kill ends the match with the correct score and result',async({page},info)=>{
+  await fixture(page);
+  await page.evaluate(()=>{window.issueFixture.state().heroScore={blue:20,red:7};window.issueFixture.kill('hero');});
+  await expect(page.locator('#blue-score')).toHaveText('21');
+  await expect(page.locator('#red-score')).toHaveText('7');
+  await expect(page.locator('#results')).toBeVisible();
+  await expect(page.locator('#result-body')).toContainText('reaching 21 hero kills');
+  expect(await page.evaluate(()=>window.issueFixture.state().winner)).toBe('blue');
+  await page.screenshot({path:info.outputPath('21-kill-victory.png')});
 });
 
 test('#16 fountain status and heal effects follow allied ground while Regen remains independent',async({page},info)=>{

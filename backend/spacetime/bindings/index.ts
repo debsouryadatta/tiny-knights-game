@@ -38,8 +38,11 @@ import ControlCommandReducer from "./control_command_reducer";
 import EnterLobbyReducer from "./enter_lobby_reducer";
 import IssueCommandReducer from "./issue_command_reducer";
 import JoinMatchReducer from "./join_match_reducer";
+import JoinRunningMatchReducer from "./join_running_match_reducer";
 import LeaveLobbyReducer from "./leave_lobby_reducer";
 import LobbyReadyReducer from "./lobby_ready_reducer";
+import PlayQuickBotReducer from "./play_quick_bot_reducer";
+import QuickPreferenceReducer from "./quick_preference_reducer";
 import RestartMatchReducer from "./restart_match_reducer";
 import StartLobbyReducer from "./start_lobby_reducer";
 
@@ -48,7 +51,9 @@ import StartLobbyReducer from "./start_lobby_reducer";
 // Import all table schema definitions
 import LobbyRosterRow from "./lobby_roster_table";
 import MatchStateRow from "./match_state_table";
+import MyQuickQueueRow from "./my_quick_queue_table";
 import MySessionRow from "./my_session_table";
+import QuickMatchOffersRow from "./quick_match_offers_table";
 import RoomLobbyRow from "./room_lobby_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -84,6 +89,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, LobbyRosterRow),
+  myQuickQueue: __table({
+    name: 'my_quick_queue',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyQuickQueueRow),
   mySession: __table({
     name: 'my_session',
     indexes: [
@@ -91,6 +103,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MySessionRow),
+  quickMatchOffers: __table({
+    name: 'quick_match_offers',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, QuickMatchOffersRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -99,8 +118,11 @@ const reducersSchema = __reducers(
   __reducerSchema("enter_lobby", EnterLobbyReducer),
   __reducerSchema("issue_command", IssueCommandReducer),
   __reducerSchema("join_match", JoinMatchReducer),
+  __reducerSchema("join_running_match", JoinRunningMatchReducer),
   __reducerSchema("leave_lobby", LeaveLobbyReducer),
   __reducerSchema("lobby_ready", LobbyReadyReducer),
+  __reducerSchema("play_quick_bot", PlayQuickBotReducer),
+  __reducerSchema("quick_preference", QuickPreferenceReducer),
   __reducerSchema("restart_match", RestartMatchReducer),
   __reducerSchema("start_lobby", StartLobbyReducer),
 );

@@ -3,6 +3,7 @@ import type {Actor,HeroKind} from './types';
 // Inspectable prototype balance; level growth never changes class attack timing.
 export const HERO_XP_THRESHOLDS = [0,100,240,420,640,900,1200,1540,1920,2340] as const;
 export const HERO_MAX_LEVEL = HERO_XP_THRESHOLDS.length;
+export const HERO_KILL_TARGET = 21;
 export const KILL_XP = {hero:100,creep:25,companion:25} as const;
 export const BUILD_CHANNEL_SECONDS = 2.5;
 export const FOUNTAIN_RADIUS = 5;

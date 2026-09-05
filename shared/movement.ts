@@ -7,12 +7,13 @@ export const ACTOR_RADIUS=.28;
 export function canOccupy(state:GameState,p:Vec,except?:string):boolean {
   if(!Number.isFinite(p.x)||!Number.isFinite(p.y))return false;
   const r=ACTOR_RADIUS;
+  const mover=state.actors.find(a=>a.id===except);
   for(let y=Math.round(p.y-r);y<=Math.round(p.y+r);y++)for(let x=Math.round(p.x-r);x<=Math.round(p.x+r);x++){
     if(isWalkable(x,y))continue;
     const nx=Math.max(x-.5,Math.min(x+.5,p.x)),ny=Math.max(y-.5,Math.min(y+.5,p.y));
     if(Math.hypot(p.x-nx,p.y-ny)<r-1e-6)return false;
   }
-  return !state.actors.some(a=>a.id!==except&&a.hp>0&&Math.hypot(a.x-p.x,a.y-p.y)<r*2-1e-6)&&!state.structures.some(a=>a.hp>0&&Math.hypot(a.x-p.x,a.y-p.y)<r+.45-1e-6);
+  return !state.actors.some(a=>a.id!==except&&a.hp>0&&a.team!==mover?.team&&Math.hypot(a.x-p.x,a.y-p.y)<r*2-1e-6)&&!state.structures.some(a=>a.hp>0&&Math.hypot(a.x-p.x,a.y-p.y)<r+.45-1e-6);
 }
 /** Shared by authoritative simulation and local prediction. Sweep in short steps, slide along walls. */
 export function moveContinuous(state:GameState,actor:Vec & {id:string},dx:number,dy:number):void {

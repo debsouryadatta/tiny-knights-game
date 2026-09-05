@@ -10,7 +10,7 @@ import type {
   Vec,
 } from "./types";
 import {canOccupy,moveContinuous,getMoveSpeed} from './movement';
-import {HERO_XP_THRESHOLDS,KILL_XP,heroLevel,heroMaxHp,BUILD_CHANNEL_SECONDS,FOUNTAIN_RADIUS,FOUNTAIN_HEAL_FRACTION} from './balance';
+import {HERO_KILL_TARGET,HERO_XP_THRESHOLDS,KILL_XP,heroLevel,heroMaxHp,BUILD_CHANNEL_SECONDS,FOUNTAIN_RADIUS,FOUNTAIN_HEAL_FRACTION} from './balance';
 import {HERO_HP,CREEP_HP,TOWER_DAMAGE,CORE_DAMAGE,SPAWN_PROTECTION,ABILITY_COOLDOWNS,DASH_DAMAGE,DASH_DISTANCE,SPRINT_DURATION,SHOCKWAVE_DAMAGE,SHOCKWAVE_RADIUS,SHOCKWAVE_PUSH,attackDamage,attackInterval} from './balance';
 import {
   WIDTH,
@@ -90,9 +90,10 @@ function clearCombatControls(s: GameState, a: Actor) {
   // Keep inputSeq across death so delayed packets cannot resurrect old input.
 }
 function occupied(s: GameState, p: Vec, except?: string) {
+  const mover = s.actors.find(a => a.id === except);
   return (
     s.actors.some(
-      (a) => a.id !== except && a.hp > 0 && distance(a,p)<.56,
+      (a) => a.id !== except && a.hp > 0 && a.team !== mover?.team && distance(a,p)<.56,
     ) || s.structures.some((a) => a.hp > 0 && distance(a,p)<.73)
   );
 }
@@ -152,6 +153,7 @@ export function createGame(room: string, size: number = 1): GameState {
     tick: 0,
     elapsed: 0,
     phase: "playing",
+    heroScore: {blue:0,red:0},
     actors: [],
     structures: [],
     resources: resourceSeeds().map((r, i) => ({
@@ -162,7 +164,7 @@ export function createGame(room: string, size: number = 1): GameState {
     })),
     bank: { blue: { wood: 0, gold: 0 }, red: { wood: 0, gold: 0 } },
     effects: [],
-    log: ["Gather wood and gold. Build towers. Destroy the enemy core."],
+    log: [`Gather wood and gold. Build towers. Destroy the enemy core or reach ${HERO_KILL_TARGET} hero kills.`],
   };
   for (const team of ["blue", "red"] as Team[]) {
     s.structures.push({
@@ -207,6 +209,11 @@ export function addPlayer(s: GameState, draft: Draft): string {
   // A friend takes over the bot's slot at base with fresh controls and cooldowns.
   cancelBuild(s,a);
   const fresh = actor(a.id, a.team, nearestFree(s, spawnFor(a.team, 0), a.id), draft.hero);
+  fresh.xp = a.xp ?? 0;
+  fresh.level = heroLevel(fresh.xp);
+  fresh.hp = fresh.maxHp = heroMaxHp(draft.hero, fresh.level);
+  fresh.kills = a.kills;
+  fresh.gathered = a.gathered;
   s.actors[s.actors.indexOf(a)] = fresh;
   const m = memory(s);
   delete m.routes[a.id];
@@ -233,7 +240,7 @@ function damage(
     ('hero' in source && (source.hero === 'ranger' || source.companion === 'scout'))
     ? 'projectile' : 'melee',
 ) {
-  if (source.hp <= 0 || target.hp <= 0 || !Number.isFinite(amount) || amount <= 0) return 0;
+  if (s.phase !== 'playing' || source.team === target.team || source.hp <= 0 || target.hp <= 0 || !Number.isFinite(amount) || amount <= 0) return 0;
   if ('respawnAt' in source) source.protectedUntil=0;
   if ('respawnAt' in target && (target.protectedUntil??0)>s.elapsed) return 0;
   if('recallUntil' in target)target.recallUntil=undefined;
@@ -268,16 +275,26 @@ function damage(
       s.bank[source.team].gold += target.kind === "hero" ? 15 : 5;
       if (target.kind !== "creep")
         log(s, `${target.name} defeated · respawning`);
+      if (target.kind === 'hero') {
+        s.heroScore ??= {blue:0,red:0};
+        s.heroScore[source.team]++;
+        if (s.heroScore[source.team] >= HERO_KILL_TARGET) finishGame(s, source.team, 'hero-kills');
+      }
     } else {
       log(s, `${target.team} ${target.kind} destroyed`);
       if (target.kind === "core") {
-        s.phase = "finished";
-        s.winner = source.team;
-        log(s, `${source.team.toUpperCase()} empire wins!`);
+        finishGame(s, source.team, 'core');
       }
     }
   }
   return applied;
+}
+function finishGame(s: GameState, winner: Team, reason: NonNullable<GameState['winnerReason']>) {
+  if (s.phase !== 'playing') return;
+  s.phase = 'finished';
+  s.winner = winner;
+  s.winnerReason = reason;
+  log(s, `${winner.toUpperCase()} empire wins · ${reason === 'core' ? 'enemy core destroyed' : `${HERO_KILL_TARGET} hero kills`}!`);
 }
 function enemies(s: GameState, a: Actor | Structure): (Actor | Structure)[] {
   return [
@@ -556,6 +573,7 @@ function pushTarget(s: GameState, a: Actor): Vec {
 }
 export function stepGame(s: GameState, dt: number): void {
   if (s.phase !== "playing" || !Number.isFinite(dt) || dt <= 0) return;
+  s.heroScore ??= {blue:0,red:0};
   dt = Math.min(dt, 0.5);
   const m = memory(s);
   // Old persisted rooms keep their health fraction, including dead actors.
@@ -616,6 +634,7 @@ export function stepGame(s: GameState, dt: number): void {
       "OVERTIME · structures take double damage, increasing every 2 minutes",
     );
   for (const a of s.actors) {
+    if (s.phase !== 'playing') return;
     a.cooldown = Math.max(0, a.cooldown - dt - 1e-9);
     a.abilityCooldowns=(a.abilityCooldowns??[a.abilityCooldown,0,0]).map(v=>Math.max(0,v-dt));a.abilityCooldown=a.abilityCooldowns[0];
     a.regenCooldown=Math.max(0,(a.regenCooldown??0)-dt);
@@ -774,6 +793,7 @@ export function stepGame(s: GameState, dt: number): void {
     }
   }
   for (const t of s.structures) {
+    if (s.phase !== 'playing') return;
     if (t.hp <= 0) continue;
     t.cooldown = Math.max(0, t.cooldown - dt - 1e-9);
     const foe = s.actors

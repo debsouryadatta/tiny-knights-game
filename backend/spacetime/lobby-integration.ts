@@ -95,7 +95,7 @@ try {
   assert.notEqual(firstQuick.room, room, 'quick match never selects started private room');
   await waitFor(() => !!lobby(quickOne.conn, firstQuick.room), 'public lobby');
   assert.equal(lobby(quickOne.conn, firstQuick.room).publicMatch, true);
-  assert.equal(lobby(quickOne.conn, firstQuick.room).started, true);
+  assert.equal(lobby(quickOne.conn, firstQuick.room).started, false);
   let secondQuick = await enter(quickTwo.conn, '', 'quick');
   // A prior run may leave one reserved slot in a public room. Fill it, then
   // check pairing in the newly allocated room without deleting database data.
@@ -106,6 +106,7 @@ try {
     secondQuick = await enter(quickTwo.conn, '', 'quick');
   }
   assert.equal(secondQuick.room, firstQuick.room, 'two quick players share a public match');
+  await waitFor(() => lobby(quickOne.conn, firstQuick.room)?.started === true, 'paired humans start automatically');
   assert.notEqual(secondQuick.playerId, firstQuick.playerId);
   const quickThree = await connect();
   const thirdQuick = await enter(quickThree.conn, '', 'quick');

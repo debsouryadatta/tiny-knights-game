@@ -12,10 +12,36 @@ const connection = table({}, { id: t.connectionId().primaryKey(), identity: t.id
 // Separate clocks keep a movement packet from suppressing the other thumb's action.
 const control_clock = table({}, { key: t.string().primaryKey(), sentAt: t.u64() });
 const room_lobby = table({ public: true }, { room: t.string().primaryKey(), publicMatch: t.bool(), started: t.bool(), hostPlayerId: t.string(), readyPlayers: t.string() });
-const db = schema({ match_state, membership, tick_timer, room_owner, connection, control_clock, room_lobby });
+const quick_queue = table({}, { room: t.string().primaryKey(), deadlineMicros: t.u64(), humanOnly: t.bool() });
+const db = schema({ match_state, membership, tick_timer, room_owner, connection, control_clock, room_lobby, quick_queue });
 export default db;
 
 export const mySession = db.view({ public: true }, t.option(membership.rowType), ctx => ctx.db.membership.identity.find(ctx.sender) ?? undefined);
+export const myQuickQueue = db.view({ public: true }, t.option(quick_queue.rowType), ctx => {
+  const member = ctx.db.membership.identity.find(ctx.sender);
+  return member ? ctx.db.quick_queue.room.find(member.room) ?? undefined : undefined;
+});
+export const quickMatchOffers = db.view({ public: true }, t.array(t.object('QuickMatchOffer', {
+  room: t.string(), blueScore: t.u32(), redScore: t.u32(), elapsed: t.f64(), side: t.string(),
+})), ctx => {
+  const member = ctx.db.membership.identity.find(ctx.sender);
+  if (!member || !ctx.db.quick_queue.room.find(member.room)) return [];
+  const members = [...ctx.db.membership.iter()];
+  const online = new Set([...ctx.db.connection.iter()].map(c => c.identity.toHexString()));
+  const offers = [];
+  for (const lobby of ctx.db.room_lobby.iter()) {
+    if (!lobby.publicMatch || !lobby.started) continue;
+    const occupants = members.filter(m => m.room === lobby.room);
+    if (occupants.length !== 1 || !online.has(occupants[0].identity.toHexString())) continue;
+    const row = ctx.db.match_state.room.find(lobby.room);
+    if (!row) continue;
+    const state: GameState = JSON.parse(row.snapshot);
+    if (state.phase !== 'playing' || state.size !== 1) continue;
+    const seat = state.actors.find(a => a.kind === 'hero' && a.bot && !occupants.some(m => m.playerId === a.id));
+    if (seat) offers.push({ room: lobby.room, blueScore: state.heroScore?.blue ?? 0, redScore: state.heroScore?.red ?? 0, elapsed: state.elapsed, side: seat.team });
+  }
+  return offers;
+});
 export const lobbyRoster = db.view({public:true},t.array(t.object('LobbyMember',{playerId:t.string(),online:t.bool()})),ctx=>{
   const member=ctx.db.membership.identity.find(ctx.sender);
   if(!member)return [];
@@ -64,36 +90,103 @@ function joinRoom(ctx: ReducerCtx<typeof db.schemaType>, args: {room:string;name
   if (!ctx.db.room_owner.room.find(args.room)) ctx.db.room_owner.insert({ room: args.room, identity: ctx.sender });
   ctx.db.membership.insert({ identity: ctx.sender, room: args.room, playerId, lastCommandMicros: 0n });
 }
-export const joinMatch = db.reducer(draftParams, joinRoom);
+export const joinMatch = db.reducer(draftParams, (ctx,args) => {
+  const room=args.room.trim().toUpperCase();
+  if(ctx.db.room_lobby.room.find(room)?.publicMatch&&!ctx.db.membership.identity.find(ctx.sender))throw new SenderError('Use Quick Play to join a public match.');
+  joinRoom(ctx,args);
+});
 export const enterLobby = db.reducer({ ...draftParams, mode: t.string() }, (ctx, args) => {
   if (!['create','join','quick'].includes(args.mode)) throw new SenderError('Invalid lobby mode.');
   const prior=ctx.db.membership.identity.find(ctx.sender);
-  if(prior){joinRoom(ctx,{...args,room:prior.room});return;}
+  if(prior){
+    joinRoom(ctx,{...args,room:prior.room});
+    if(ctx.db.quick_queue.room.find(prior.room)) {
+      // A queued reconnect may find a human who arrived while it was offline.
+      for(const queue of ctx.db.quick_queue.iter()) {
+        if(queue.room===prior.room)continue;
+        const lobby=ctx.db.room_lobby.room.find(queue.room);
+        const occupants=[...ctx.db.membership.iter()].filter(m=>m.room===queue.room);
+        if(!lobby?.publicMatch||lobby.started||occupants.length!==1||![...ctx.db.connection.iter()].some(c=>c.identity.equals(occupants[0].identity)))continue;
+        moveQueuedPlayer(ctx,queue.room);
+        ctx.db.room_lobby.room.update({...lobby,started:true});
+        ctx.db.quick_queue.room.delete(queue.room);
+        break;
+      }
+    }
+    return;
+  }
   let room=args.room.trim().toUpperCase();
   if(args.mode==='quick') {
     room='';
     for(const lobby of ctx.db.room_lobby.iter()) {
-      if(!lobby.publicMatch||!lobby.started)continue;
+      if(!lobby.publicMatch||lobby.started||!ctx.db.quick_queue.room.find(lobby.room))continue;
       const row=ctx.db.match_state.room.find(lobby.room);
       if(!row)continue;
       const state:GameState=JSON.parse(row.snapshot);
-      if(state.size===1&&state.phase==='playing'&&[...ctx.db.membership.iter()].filter(m=>m.room===lobby.room).length<2){room=lobby.room;break;}
+      const occupants=[...ctx.db.membership.iter()].filter(m=>m.room===lobby.room);
+      if(state.size===1&&state.phase==='playing'&&occupants.length===1&&[...ctx.db.connection.iter()].some(c=>c.identity.equals(occupants[0].identity))){room=lobby.room;break;}
     }
     if(!room)room=`Q${ctx.timestamp.microsSinceUnixEpoch.toString(36).toUpperCase()}${ctx.sender.toHexString().slice(-4).toUpperCase()}`;
   }
   const existing=ctx.db.match_state.room.find(room);
   if(args.mode==='create'&&existing)throw new SenderError('Room code is already in use. Try again.');
   if(args.mode==='join'&&!existing)throw new SenderError('Room not found. Check the code with your friend.');
+  if(args.mode==='join'&&ctx.db.room_lobby.room.find(room)?.publicMatch)throw new SenderError('Use Quick Play to join a public match.');
   joinRoom(ctx,{...args,room});
   if(!ctx.db.room_lobby.room.find(room)) {
     const member=ctx.db.membership.identity.find(ctx.sender)!;
-    ctx.db.room_lobby.insert({room,publicMatch:args.mode==='quick',started:args.mode!=='create',hostPlayerId:member.playerId,readyPlayers:'[]'});
+    ctx.db.room_lobby.insert({room,publicMatch:args.mode==='quick',started:args.mode==='join',hostPlayerId:member.playerId,readyPlayers:'[]'});
+    if(args.mode==='quick')ctx.db.quick_queue.insert({room,deadlineMicros:ctx.timestamp.microsSinceUnixEpoch+15_000_000n,humanOnly:false});
+  } else if(args.mode==='quick') {
+    const lobby=ctx.db.room_lobby.room.find(room)!;
+    ctx.db.room_lobby.room.update({...lobby,started:true});
+    ctx.db.quick_queue.room.delete(room);
   }
+});
+export const quickPreference = db.reducer({ humanOnly: t.bool() }, (ctx, args) => {
+  const member=ctx.db.membership.identity.find(ctx.sender);
+  const queue=member&&ctx.db.quick_queue.room.find(member.room);
+  if(!queue)throw new SenderError('No active Quick Play search.');
+  ctx.db.quick_queue.room.update({...queue,humanOnly:args.humanOnly,deadlineMicros:args.humanOnly?queue.deadlineMicros:ctx.timestamp.microsSinceUnixEpoch+15_000_000n});
+});
+export const playQuickBot = db.reducer(ctx => {
+  const member=ctx.db.membership.identity.find(ctx.sender);
+  const queue=member&&ctx.db.quick_queue.room.find(member.room);
+  const lobby=member&&ctx.db.room_lobby.room.find(member.room);
+  if(!queue||!lobby||lobby.started)throw new SenderError('No active Quick Play search.');
+  ctx.db.room_lobby.room.update({...lobby,started:true});
+  ctx.db.quick_queue.room.delete(queue.room);
+});
+function moveQueuedPlayer(ctx:ReducerCtx<typeof db.schemaType>,room:string) {
+  const member=ctx.db.membership.identity.find(ctx.sender)!;
+  const source:GameState=JSON.parse(ctx.db.match_state.room.find(member.room)!.snapshot);
+  const hero=source.actors.find(a=>a.id===member.playerId)!;
+  const companion=source.actors.find(a=>a.kind==='companion'&&a.ownerId===hero.id);
+  ctx.db.membership.identity.delete(ctx.sender);
+  ctx.db.quick_queue.room.delete(member.room);
+  ctx.db.room_lobby.room.delete(member.room);
+  ctx.db.match_state.room.delete(member.room);
+  ctx.db.room_owner.room.delete(member.room);
+  joinRoom(ctx,{room,name:hero.name,hero:hero.hero,companion:companion?.companion??'harvester',size:1});
+}
+export const joinRunningMatch = db.reducer({ room:t.string() }, (ctx,args) => {
+  const member=ctx.db.membership.identity.find(ctx.sender);
+  if(!member||!ctx.db.quick_queue.room.find(member.room))throw new SenderError('Start a Quick Play search first.');
+  const room=args.room.trim().toUpperCase();
+  const lobby=ctx.db.room_lobby.room.find(room);
+  const row=ctx.db.match_state.room.find(room);
+  const occupants=[...ctx.db.membership.iter()].filter(m=>m.room===room);
+  if(!lobby?.publicMatch||!lobby.started||!row||occupants.length!==1||![...ctx.db.connection.iter()].some(c=>c.identity.equals(occupants[0].identity)))throw new SenderError('This game is no longer available. Keep searching.');
+  const target:GameState=JSON.parse(row.snapshot);
+  if(target.phase!=='playing'||target.size!==1)throw new SenderError('This game has ended. Keep searching.');
+  // Reducers commit atomically: a stale/full offer leaves the source search intact.
+  moveQueuedPlayer(ctx,room);
 });
 export const lobbyReady = db.reducer({ ready:t.bool() },(ctx,args)=>{
   const member=ctx.db.membership.identity.find(ctx.sender);
   const lobby=member&&ctx.db.room_lobby.room.find(member.room);
   if(!member||!lobby||lobby.started)throw new SenderError('No waiting lobby.');
+  if(lobby.publicMatch)throw new SenderError('Quick Play starts automatically.');
   const ready=new Set<string>(JSON.parse(lobby.readyPlayers));
   if(args.ready)ready.add(member.playerId);else ready.delete(member.playerId);
   ctx.db.room_lobby.room.update({...lobby,readyPlayers:JSON.stringify([...ready])});
@@ -102,6 +195,7 @@ export const startLobby = db.reducer(ctx=>{
   const member=ctx.db.membership.identity.find(ctx.sender);
   const lobby=member&&ctx.db.room_lobby.room.find(member.room);
   if(!member||!lobby||lobby.started)throw new SenderError('No waiting lobby.');
+  if(lobby.publicMatch)throw new SenderError('Use Quick Play controls to start.');
   if(lobby.hostPlayerId!==member.playerId)throw new SenderError('Only the host can start.');
   const ready:string[]=JSON.parse(lobby.readyPlayers);
   const guests=[...ctx.db.membership.iter()].filter(m=>m.room===member.room&&m.playerId!==member.playerId);
@@ -116,7 +210,7 @@ export const leaveLobby = db.reducer(ctx=>{
   const row=ctx.db.match_state.room.find(member.room);
   if(row){const state:GameState=JSON.parse(row.snapshot);const actor=state.actors.find(a=>a.id===member.playerId);if(actor)actor.bot=true;ctx.db.match_state.room.update({...row,snapshot:JSON.stringify(state),revision:row.revision+1});}
   const remaining=[...ctx.db.membership.iter()].filter(m=>m.room===member.room);
-  if(!remaining.length){ctx.db.room_lobby.room.delete(member.room);ctx.db.match_state.room.delete(member.room);ctx.db.room_owner.room.delete(member.room);return;}
+  if(!remaining.length){ctx.db.quick_queue.room.delete(member.room);ctx.db.room_lobby.room.delete(member.room);ctx.db.match_state.room.delete(member.room);ctx.db.room_owner.room.delete(member.room);return;}
   if(lobby.hostPlayerId===member.playerId){ctx.db.room_lobby.room.update({...lobby,hostPlayerId:remaining[0].playerId,readyPlayers:'[]'});ctx.db.room_owner.room.update({room:member.room,identity:remaining[0].identity});}
   else ctx.db.room_lobby.room.update({...lobby,readyPlayers:JSON.stringify((JSON.parse(lobby.readyPlayers) as string[]).filter(id=>id!==member.playerId))});
 });
@@ -218,6 +312,12 @@ export const tick = db.reducer({ onSchedule: tick_timer }, { timer: tick_timer.r
   if (!ctx.sender.equals(ctx.identity)) throw new SenderError('Only server scheduler can advance time.');
   const online = new Set([...ctx.db.connection.iter()].map(c => c.identity.toHexString()));
   const activeRooms = new Set([...ctx.db.membership.iter()].filter(m => online.has(m.identity.toHexString())).map(m => m.room));
+  for(const queue of ctx.db.quick_queue.iter()) {
+    if(queue.humanOnly||queue.deadlineMicros>ctx.timestamp.microsSinceUnixEpoch||!activeRooms.has(queue.room))continue;
+    const lobby=ctx.db.room_lobby.room.find(queue.room);
+    if(lobby&&!lobby.started)ctx.db.room_lobby.room.update({...lobby,started:true});
+    ctx.db.quick_queue.room.delete(queue.room);
+  }
   for (const row of ctx.db.match_state.iter()) {
     // Disposable automated-test rooms must not exhaust the public prototype.
     // Never remove connected rooms or ordinary player-generated room codes.

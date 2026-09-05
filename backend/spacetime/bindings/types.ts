@@ -46,8 +46,30 @@ export const Membership = __t.object("Membership", {
 });
 export type Membership = __Infer<typeof Membership>;
 
+export const MyQuickQueue = __t.object("MyQuickQueue", {});
+export type MyQuickQueue = __Infer<typeof MyQuickQueue>;
+
 export const MySession = __t.object("MySession", {});
 export type MySession = __Infer<typeof MySession>;
+
+export const QuickMatchOffer = __t.object("QuickMatchOffer", {
+  room: __t.string(),
+  blueScore: __t.u32(),
+  redScore: __t.u32(),
+  elapsed: __t.f64(),
+  side: __t.string(),
+});
+export type QuickMatchOffer = __Infer<typeof QuickMatchOffer>;
+
+export const QuickMatchOffers = __t.object("QuickMatchOffers", {});
+export type QuickMatchOffers = __Infer<typeof QuickMatchOffers>;
+
+export const QuickQueue = __t.object("QuickQueue", {
+  room: __t.string(),
+  deadlineMicros: __t.u64(),
+  humanOnly: __t.bool(),
+});
+export type QuickQueue = __Infer<typeof QuickQueue>;
 
 export const RoomLobby = __t.object("RoomLobby", {
   room: __t.string(),

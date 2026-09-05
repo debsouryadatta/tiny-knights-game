@@ -199,14 +199,16 @@ test("ability cooldown and respawn are authoritative", () => {
   run(s, 2);
   assert.equal(a.hp, a.maxHp);
 });
-test("active simulation preserves physical separation and terrain bounds across a minute", () => {
+test("active simulation preserves enemy separation and terrain bounds across a minute", () => {
   const s = createGame("test", 1);
   let fractional=false;
   for (let t = 0; t < 600; t++) {
     stepGame(s, 0.1);
     const alive = s.actors.filter((a) => a.hp > 0);
     fractional ||= alive.some(a=>Math.abs(a.x-Math.round(a.x))>.01||Math.abs(a.y-Math.round(a.y))>.01);
-    assert.equal(new Set(alive.map((a) => `${a.x},${a.y}`)).size, alive.length);
+    for(const a of alive)for(const b of alive){
+      if(a.team!==b.team)assert.ok(Math.hypot(a.x-b.x,a.y-b.y)>=.56-1e-6);
+    }
     assert.ok(alive.every((a) => canOccupy(s,a,a.id)));
     assert.ok(s.effects.length <= 60);
   }

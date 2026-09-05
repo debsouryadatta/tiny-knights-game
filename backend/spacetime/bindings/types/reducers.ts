@@ -10,8 +10,11 @@ import ControlCommandReducer from "../control_command_reducer";
 import EnterLobbyReducer from "../enter_lobby_reducer";
 import IssueCommandReducer from "../issue_command_reducer";
 import JoinMatchReducer from "../join_match_reducer";
+import JoinRunningMatchReducer from "../join_running_match_reducer";
 import LeaveLobbyReducer from "../leave_lobby_reducer";
 import LobbyReadyReducer from "../lobby_ready_reducer";
+import PlayQuickBotReducer from "../play_quick_bot_reducer";
+import QuickPreferenceReducer from "../quick_preference_reducer";
 import RestartMatchReducer from "../restart_match_reducer";
 import StartLobbyReducer from "../start_lobby_reducer";
 
@@ -19,8 +22,11 @@ export type ControlCommandParams = __Infer<typeof ControlCommandReducer>;
 export type EnterLobbyParams = __Infer<typeof EnterLobbyReducer>;
 export type IssueCommandParams = __Infer<typeof IssueCommandReducer>;
 export type JoinMatchParams = __Infer<typeof JoinMatchReducer>;
+export type JoinRunningMatchParams = __Infer<typeof JoinRunningMatchReducer>;
 export type LeaveLobbyParams = __Infer<typeof LeaveLobbyReducer>;
 export type LobbyReadyParams = __Infer<typeof LobbyReadyReducer>;
+export type PlayQuickBotParams = __Infer<typeof PlayQuickBotReducer>;
+export type QuickPreferenceParams = __Infer<typeof QuickPreferenceReducer>;
 export type RestartMatchParams = __Infer<typeof RestartMatchReducer>;
 export type StartLobbyParams = __Infer<typeof StartLobbyReducer>;
 

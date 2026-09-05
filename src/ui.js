@@ -1,5 +1,6 @@
 import { getMainAction, createMainActionHold } from './contextual-action.js';
 import { packIcon } from './pack-icons.js';
+import { HERO_XP_THRESHOLDS } from '../shared/balance';
 import './waiting-lobby.css';
 import './mobile-layout.css';
 export function createUI({ client, audio, onViewChange = () => {} }) {
@@ -18,6 +19,7 @@ export function createUI({ client, audio, onViewChange = () => {} }) {
   <dialog id="help-dialog"><button class="close" aria-label="Close controls">×</button><h2>Make your move.</h2><p>Gather wood and gold, build towers near your hero, then destroy the enemy core. Companions follow the order you choose. The match keeps running while this is open.</p><ul><li><span>Move / choose destination</span><b>WASD / click map</b></li><li><span>Attack / gather</span><b>Space / E</b></li><li><span>Hero ability / recall</span><b>Q / R</b></li><li><span>Build / overview</span><b>B / M</b></li><li><span>Cancel / close</span><b>Esc</b></li></ul><p>On phones, use the left joystick and right action buttons. Tap Tower, then an empty nearby tile. Teammates share resources.</p><div class="dialog-actions"><button id="leave">Leave match</button><button class="primary" id="resume">Return to match</button></div></dialog><dialog id="results"><h2 id="result-title">The realm is yours.</h2><p id="result-body"></p><div class="dialog-actions"><button id="result-leave">Leave match</button><button class="primary" id="restart">Play again</button></div></dialog>`;
   document.body.classList.add('join-active');
   const $ = s => root.querySelector(s);
+  $('.hero-title').insertAdjacentHTML('afterend','<div id="xp-progress" role="progressbar" aria-label="Progress to next level" aria-valuemin="0" aria-valuemax="100"><i id="xp-bar"></i></div>');
   $('#help-dialog .dialog-actions').insertAdjacentHTML('beforebegin','<fieldset class="audio-settings"><legend>Sound</legend><label>Ambience<input id="ambience-volume" type="range" min="0" max="100" value="45"></label><label>Sound effects<input id="sfx-volume" type="range" min="0" max="100" value="65"></label><small id="audio-status" role="status"></small></fieldset>');
   const updateAudio=()=>{const state=audio.getStats();$('#sound').setAttribute('aria-pressed',String(state.enabled));$('#sound').setAttribute('aria-label',state.enabled?'Mute sound':'Enable sound');$('#sound').classList.toggle('active',state.enabled);$('#sound').disabled=state.busy;$('#audio-status').textContent=state.error||'';};
   listen($('#sound'),'click',()=>void audio.toggle());
@@ -38,6 +40,31 @@ export function createUI({ client, audio, onViewChange = () => {} }) {
   roomInput.closest('label').before(roomEntry);roomEntry.append(roomInput.closest('label'),$('#join'));
   const lobbyActions=document.createElement('div');lobbyActions.className='waiting-actions';
   $('#waiting-lobby').append(lobbyActions);lobbyActions.append($('#lobby-start'),$('#lobby-ready'),$('#lobby-leave'));
+  const queuePanel=document.createElement('section');queuePanel.id='quick-queue';queuePanel.hidden=true;
+  queuePanel.innerHTML='<p id="quick-countdown" role="status" aria-live="polite"></p><div class="quick-choices"><button id="quick-wait">Keep waiting for a human</button><button id="quick-bot" hidden>Play against bot</button></div><h2>Join a game in progress</h2><p>You choose whether to join. Scores are hero kills · first to 21 wins, or destroy the core.</p><div id="quick-offers"></div>';
+  lobbyActions.before(queuePanel);
+  const refreshCountdown=()=>{if(!client.quickQueue||queuePanel.hidden)return;const q=client.quickQueue,seconds=Math.max(0,Math.ceil((Number(q.deadlineMicros)/1000-Date.now())/1000));const text=q.humanOnly?'Waiting for a human may take a little longer. You can still join a game below or play against a bot.':seconds?`Finding a human opponent · ${seconds}s until a bot match starts.`:'Starting your match…';if($('#quick-countdown').textContent!==text)$('#quick-countdown').textContent=text;};
+  const queueClock=setInterval(refreshCountdown,250);
+  let offerSignature='';
+  const updateQueue=waiting=>{
+    const publicQueue=waiting&&client.lobby?.publicMatch;
+    queuePanel.hidden=!publicQueue;$('#waiting-lobby').classList.toggle('public-queue',Boolean(publicQueue));
+    $('#waiting-lobby').setAttribute('aria-label',publicQueue?'Quick Play matchmaking':'Private room lobby');
+    $('#waiting-lobby .legend').textContent=publicQueue?'QUICK PLAY · 1v1':'PRIVATE DUEL · 1v1';
+    $('#waiting-lobby h1').textContent=publicQueue?'Finding your rival.':'Your party.';
+    $('#waiting-lobby h1 + p').hidden=Boolean(publicQueue);$('#lobby-copy').hidden=Boolean(publicQueue);$('#lobby-roster').hidden=Boolean(publicQueue);$('#lobby-status').hidden=Boolean(publicQueue);
+    if(!publicQueue)return;
+    $('#lobby-start').hidden=true;$('#lobby-ready').hidden=true;$('#lobby-leave').textContent='Cancel matchmaking';
+    $('#quick-wait').hidden=Boolean(client.quickQueue?.humanOnly);$('#quick-bot').hidden=!client.quickQueue?.humanOnly;
+    refreshCountdown();
+    const offers=client.quickOffers||[],signature=JSON.stringify(offers.map(o=>({...o,elapsed:Math.floor(o.elapsed)})));
+    if(signature===offerSignature)return;offerSignature=signature;
+    const list=$('#quick-offers');
+    // Keep buttons stable while scores update so keyboard focus and taps survive live snapshots.
+    const rooms=new Set(offers.map(o=>o.room));for(const card of [...list.children])if(!rooms.has(card.dataset.room))card.remove();
+    for(const offer of offers){let card=[...list.children].find(c=>c.dataset.room===offer.room);if(!card){card=document.createElement('article');card.className='quick-offer';card.dataset.room=offer.room;const label=document.createElement('span'),button=document.createElement('button');button.textContent='Join this game';button.addEventListener('click',()=>void client.joinRunning(offer.room));card.append(label,button);list.append(card);}const seconds=Math.floor(offer.elapsed);card.firstChild.textContent=`Blue ${offer.blueScore} – ${offer.redScore} Red · ${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')} · Join ${offer.side}`;}
+    if(!offers.length){const empty=document.createElement('p');empty.textContent='No open games right now. New offers will appear here.';list.replaceChildren(empty);}
+  };
   const heroStack=document.createElement('div');heroStack.className='hero-stack';
   $('.hud').append(heroStack);heroStack.append($('.hero-panel'),$('.companion'));
   roomInput.value=(new URLSearchParams(location.search).get('room')||'').replace(/[^a-z0-9]/gi,'').slice(0,12).toUpperCase();
@@ -65,6 +92,8 @@ export function createUI({ client, audio, onViewChange = () => {} }) {
   $('.topbar .wordmark').remove();
   $('.topbar .utility').insertAdjacentHTML('afterbegin','<span id="ping-indicator" class="ping-indicator" data-quality="unknown" title="Round trip to SpacetimeDB, including server response time. Refreshes about every 3 seconds.">Ping —</span>');
   $('.bank').innerHTML='<span class="blue"><b id="blue-score">0</b><small id="blue-core">100%</small></span><span id="clock">00:00</span><span class="red"><b id="red-score">0</b><small id="red-core">100%</small></span>';
+  $('.intro').textContent='Bring a friend. Choose your hero and companion. Win with 21 hero kills or break the enemy core.';
+  $('#help-dialog').querySelector('p').textContent='Win by reaching 21 enemy hero kills or destroying the enemy core. Minions and companions grant XP, but do not count toward the 21. Gather resources and build towers to support your push. The match keeps running while this is open.';
   $('.hud').insertAdjacentHTML('beforeend','<div class="resource-bank"><span>Wood <b id="wood">0</b></span><span>Gold <b id="gold">0</b></span></div><div id="aim-cancel" class="aim-cancel" hidden>×<small>Cancel</small></div>');
   $('.actions').outerHTML=`<div class="combat-controls"><button data-action="attack" class="combat-button attack" aria-label="Attack: hold Space or hold this button" title="Hold Space to attack. Release to stop."><kbd>Space</kbd>${icon('attack')}<span>Attack</span></button>${[1,2,3].map((slot,i)=>`<button data-action="ability" data-slot="${slot}" class="combat-button skill skill-${slot}" aria-label="Ability ${slot}"><kbd>${['Q','E','F'][i]}</kbd>${icon(`ability${slot}`)}<span class="skill-name">Skill ${slot}</span><b class="cooldown" hidden></b></button>`).join('')}</div><div class="utility-actions">${[['recall','Recall','R'],['regen','Regen','T']].map(([a,n,k])=>`<button data-action="${a}" class="combat-button"><kbd>${k}</kbd>${icon(a)}<span>${n}</span><b class="cooldown" hidden></b></button>`).join('')}</div><div class="economy-actions">${[['gather','Gather','C'],['build','Build','B']].map(([a,n,k])=>`<button data-action="${a}"><kbd>${k}</kbd>${icon(a)}<span>${n}</span></button>`).join('')}</div>`;
   $('#help-dialog ul').innerHTML='<li><span>Move / hold to attack</span><b>WASD / Space</b></li><li><span>Skills 1 / 2 / 3</span><b>Q / E / F</b></li><li><span>Recall / regenerate</span><b>R / T</b></li><li><span>Gather / build</span><b>C / B</b></li><li><span>Overview / grid</span><b>M / G</b></li>';
@@ -83,6 +112,8 @@ export function createUI({ client, audio, onViewChange = () => {} }) {
   listen($('#quick-play'),'click',()=>void enter('quick'));listen($('#create-room'),'click',()=>void enter('create'));
   listen($('#lobby-ready'),'click',()=>{const ready=JSON.parse(client.lobby?.readyPlayers||'[]');void client.ready(!ready.includes(currentSession?.playerId));});
   listen($('#lobby-start'),'click',()=>void client.start());
+  listen($('#quick-wait'),'click',()=>void client.waitForHuman());
+  listen($('#quick-bot'),'click',()=>void client.playBot());
   listen($('#lobby-copy'),'click',async()=>{try{const url=new URL(location.href);url.searchParams.set('room',currentSession.room);await navigator.clipboard.writeText(url.href);$('#lobby-status').textContent='Invite link copied.';}catch{$('#lobby-status').textContent='Share the room code above.';}});
   root.querySelectorAll('[data-action]:not([data-action="attack"]):not([data-action="ability"])').forEach(b=>listen(b,'click',()=>action(b.dataset.action)));
   root.querySelectorAll('[data-order]').forEach(b=>listen(b,'click',()=>{client.command({type:'order',order:b.dataset.order});$('#orders').hidden=true;$('#companion-toggle').setAttribute('aria-expanded','false');}));
@@ -142,17 +173,28 @@ export function createUI({ client, audio, onViewChange = () => {} }) {
     ping.setAttribute('aria-label',`Server connection: ${label}`);
     currentSession=status==='disconnected'?null:session;hero=state?.actors.find(a=>a.id===currentSession?.playerId);const waiting=Boolean(currentSession&&client.lobby?.started===false),playing=Boolean(state&&currentSession&&!waiting);$('#join-screen').hidden=playing;$('#draft').hidden=waiting;$('#waiting-lobby').hidden=!waiting;document.body.classList.toggle('join-active',!playing);if(playing||waiting){joining=false;joiningButtons(false);updateJoinLabel();}
     if(waiting){const lobby=client.lobby,ready=JSON.parse(lobby.readyPlayers),isHost=lobby.hostPlayerId===currentSession.playerId;$('#lobby-copy').textContent=currentSession.room;$('#lobby-roster').replaceChildren();for(const actor of state?.actors.filter(a=>a.kind==='hero')||[]){const row=document.createElement('div');row.className='lobby-seat';const name=document.createElement('b'),detail=document.createElement('span'),member=client.roster?.find(m=>m.playerId===actor.id);name.textContent=member?actor.name:'Open seat · bot if you start';detail.textContent=member&&!member.online?'Disconnected · seat reserved':!member?'Invite your friend':`${actor.hero} · ${actor.id===lobby.hostPlayerId?'Host':ready.includes(actor.id)?'Ready':'Choosing / not ready'}`;row.append(name,detail);$('#lobby-roster').append(row);}$('#lobby-start').hidden=!isHost;$('#lobby-ready').hidden=isHost;$('#lobby-ready').textContent=ready.includes(currentSession.playerId)?'Not ready':'Ready';$('#lobby-ready').setAttribute('aria-pressed',String(ready.includes(currentSession.playerId)));const guests=state?.actors.filter(a=>a.kind==='hero'&&client.roster?.some(m=>m.playerId===a.id)&&a.id!==lobby.hostPlayerId)||[];$('#lobby-start').disabled=guests.some(a=>!ready.includes(a.id));$('#lobby-status').textContent=isHost?(guests.length?'Start when your friend is ready.':'Waiting for a friend. You can also start against a bot.'):'Ready up, then wait for the host to start.';$('#lobby-error').textContent=error||'';}
+    updateQueue(waiting);if(waiting&&!client.lobby?.publicMatch)$('#lobby-leave').textContent='Leave Room';
     if(!error)lastError='';if(error&&error!==lastError){lastError=error;message(error,true);$('#join-error').textContent=error;joining=false;joiningButtons(false);updateJoinLabel();}if(!state||!currentSession||waiting){sync();mainHold.release();return;}
     const mainAction=getMainAction(state,hero);mainHold.update();attack.querySelector('span:last-child').textContent=mainAction==='gather'?'Gather':'Attack';if(attack.dataset.context!==mainAction){attack.dataset.context=mainAction;attack.querySelector('.pack-icon').outerHTML=icon(mainAction);}attack.setAttribute('aria-label',mainAction==='gather'?'Gather nearby resource':'Attack: hold Space or hold this button');attack.title=mainAction==='gather'?'Gather nearby resource. C always gathers.':'Hold Space to attack. Release to stop.';
     $('#connection').textContent=client.lobby?.publicMatch?'Public match':status||'Connected';$('#room-code').textContent=session.room;const sec=Math.floor(state.elapsed);$('#clock').textContent=`${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;
     for(const t of ['blue','red']){const c=state.structures.find(s=>s.kind==='core'&&s.team===t);$(`#${t}-core`).textContent=c?`${Math.ceil(c.hp/c.maxHp*100)}%`:'—';}
     if(hero){const bank=state.bank[hero.team];$('#wood').textContent=Math.floor(bank.wood);$('#gold').textContent=Math.floor(bank.gold);$('#hero-name').textContent=hero.name;$('#hero-class').textContent=hero.hero;$('#hp-bar').style.width=`${Math.max(0,hero.hp/hero.maxHp*100)}%`;$('.health').setAttribute('aria-valuenow',String(Math.round(hero.hp/hero.maxHp*100)));$('#hp-value').textContent=hero.hp>0?`${Math.ceil(hero.hp)} / ${Math.ceil(hero.maxHp)} HP`:`Respawn ${Math.max(0,Math.ceil(hero.respawnAt-state.elapsed))}s`;$('#kills').textContent=`${hero.kills} defeats`;
-      for(const team of ['blue','red'])$(`#${team}-score`).textContent=state.actors.filter(a=>a.team===team&&a.kind==='hero').reduce((n,a)=>n+a.kills,0);
+      for(const team of ['blue','red']){$(`#${team}-score`).textContent=state.heroScore?.[team]??0;$(`#${team}-score`).setAttribute('aria-label',`${team} hero kills: ${state.heroScore?.[team]??0} of 21`);$(`#${team}-score`).title='Hero kills · first to 21 wins';}
       root.querySelectorAll('[data-slot]').forEach(b=>{const slot=Number(b.dataset.slot),name=skills[hero.hero][slot-1][0],cd=Math.max(0,Math.ceil(hero.abilityCooldowns?.[slot-1]||(slot===1?hero.abilityCooldown:0)));b.querySelector('.skill-name').textContent=name;b.setAttribute('aria-label',`Ability ${slot}: ${name}`);b.title=`${skills[hero.hero][slot-1][2]} ${slot===1?'Drag to aim.':'Tap to cast.'}`;b.classList.toggle('sprinting',slot===2&&hero.sprintUntil>state.elapsed);b.querySelector('.cooldown').textContent=cd;b.querySelector('.cooldown').hidden=cd===0;b.disabled=cd>0||hero.hp<=0;});
       const regen=$('[data-action="regen"]'),regenCd=Math.max(0,Math.ceil(hero.regenCooldown||0));regen.querySelector('.cooldown').textContent=regenCd;regen.querySelector('.cooldown').hidden=regenCd===0;regen.disabled=regenCd>0||hero.hp<=0;const recalling=Math.max(0,(hero.recallUntil||0)-state.elapsed);$('[data-action="recall"] span:not(.pack-icon)').textContent=recalling>0?`${recalling.toFixed(1)}s`:'Recall';$('[data-action="recall"]').classList.toggle('active',recalling>0);attack.disabled=hero.hp<=0;if(hero.hp<=0)mainHold.release();
       const companion=state.actors.find(a=>a.ownerId===hero.id&&a.kind==='companion');$('#companion-name').textContent=companion?.companion||'Companion';$('#companion-state').textContent=companion?`${companion.order} · ${Math.ceil(companion.hp)} HP`:'Returning to the realm';root.querySelectorAll('[data-order]').forEach(b=>b.classList.toggle('active',b.dataset.order===companion?.order));if(hero.lastAction&&hero.lastAction!==latestAction&&!view.buildMode){latestAction=hero.lastAction;message(hero.lastAction);}}
     const cast=$('#cast-status');
-    if(hero)$('#hero-class').textContent=`${hero.hero} · Lv ${hero.level??1}`;
+    if(hero){
+      const level=Math.max(1,Math.min(HERO_XP_THRESHOLDS.length,hero.level??1));
+      const floor=HERO_XP_THRESHOLDS[level-1],next=HERO_XP_THRESHOLDS[level];
+      const progress=next===undefined?1:Math.max(0,Math.min(1,((hero.xp??0)-floor)/(next-floor)));
+      const description=next===undefined?'Maximum level':`${Math.max(0,next-(hero.xp??0))} XP to level ${level+1}`;
+      $('#hero-class').textContent=`${hero.hero} · Lv ${level}`;
+      $('#xp-bar').style.transform=`scaleX(${progress})`;
+      $('#xp-progress').setAttribute('aria-valuenow',String(Math.round(progress*100)));
+      $('#xp-progress').setAttribute('aria-valuetext',description);
+      $('#xp-progress').title=description;
+    }
     const buildRemaining=Math.max(0,(hero?.buildChannel?.until||0)-state.elapsed);
     const recallRemaining=Math.max(0,(hero?.recallUntil||0)-state.elapsed);
     const dead=hero?.hp<=0,remaining=dead?Math.max(0,hero.respawnAt-state.elapsed):recallRemaining;
@@ -167,7 +209,7 @@ export function createUI({ client, audio, onViewChange = () => {} }) {
     if(hero?.fountainHealing&&hero.hp>0)feedback.textContent='Fountain healing · restoring health';
     feedback.hidden=!feedback.textContent;
     if(state.phase==='playing')resultShown=false;
-    if(state.phase==='finished'&&!resultShown){resultShown=true;$('#result-title').textContent=hero?.team===state.winner?'The realm is yours.':'Your core has fallen.';$('#result-body').textContent=`${state.winner==='blue'?'Blue':'Red'} won in ${$('#clock').textContent}. Gathered ${hero?.gathered||0} resources, defeated ${hero?.kills||0} enemies.`;$('#results').showModal();}sync();
+    if(state.phase==='finished'&&!resultShown){resultShown=true;$('#result-title').textContent=hero?.team===state.winner?'The realm is yours.':state.winnerReason==='hero-kills'?'The rival team reached 21.':'Your core has fallen.';$('#result-body').textContent=`${state.winner==='blue'?'Blue':'Red'} won by ${state.winnerReason==='hero-kills'?'reaching 21 hero kills':'destroying the enemy core'} in ${$('#clock').textContent}. Gathered ${hero?.gathered||0} resources, defeated ${hero?.kills||0} enemies.`;$('#results').showModal();}sync();
   };
-  setLoadState({});sync();return {getView:()=>view,update,setLoadState,setReady:ready=>setLoadState({playable:ready}),destroy:()=>{unsubscribeAudio();stopAll();clearInterval(movement);clearTimeout(messageTimer);listeners.forEach(fn=>fn());if(loadPanel)document.body.append(loadPanel);root.innerHTML='';}};
+  setLoadState({});sync();return {getView:()=>view,update,setLoadState,setReady:ready=>setLoadState({playable:ready}),destroy:()=>{unsubscribeAudio();stopAll();clearInterval(movement);clearInterval(queueClock);clearTimeout(messageTimer);listeners.forEach(fn=>fn());if(loadPanel)document.body.append(loadPanel);root.innerHTML='';}};
 }
