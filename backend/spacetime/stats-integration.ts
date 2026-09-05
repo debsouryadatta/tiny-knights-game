@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { DbConnection } from './bindings';
 
-// Run on an isolated server: an automatic Quick Play start takes 15 seconds.
+// Run on an isolated server: an automatic Quick Play start takes 60 seconds.
 const uri = process.env.SPACETIME_TEST_URI || 'http://127.0.0.1:3013';
 const database = process.env.SPACETIME_TEST_DATABASE || 'realm-stats-qa';
 const active: DbConnection[] = [];
@@ -77,7 +77,7 @@ try {
   await timer.conn.reducers.enterLobby(draft('', 'quick'));
   await unchanged();
   expected++;
-  await waitFor(() => count() === expected, '15 second automatic bot start', 18000);
+  await waitFor(() => count() === expected, '60 second automatic bot start', 65000);
   await unchanged();
   const legacy = await connect();
   await legacy.conn.reducers.joinMatch(draft(`${prefix}-LEGACY`));

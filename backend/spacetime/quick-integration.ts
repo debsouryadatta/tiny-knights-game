@@ -42,18 +42,20 @@ try {
   const b=await connect();await enter(b.conn);
   await until(()=>lobby(a.conn)?.started===true,'two humans auto start');
   assert.equal(session(b.conn).room,firstRoom);
-  assert.ok(Date.now()-startedAt<15000);
+  assert.ok(Date.now()-startedAt<60000);
   assert.equal(queue(a.conn),undefined);
   console.log('PASS: frozen search, human pairing before deadline and no private-host bypass');
 
   const fallback=await connect();await enter(fallback.conn);
   await until(()=>!!queue(fallback.conn),'fallback queue');
   const deadline=Number(queue(fallback.conn).deadlineMicros/1000n);
-  assert.ok(deadline-Date.now()>13000&&deadline-Date.now()<=15500,'15 second server deadline');
-  await until(()=>lobby(fallback.conn)?.started===true,'15 second bot fallback',17000);
+  assert.ok(deadline-Date.now()>58000&&deadline-Date.now()<=60500,'60 second server deadline');
+  await delay(16000);
+  assert.equal(lobby(fallback.conn)?.started,false,'still searching after the old 15 second deadline');
+  await until(()=>lobby(fallback.conn)?.started===true,'60 second bot fallback',47000);
   assert.ok(Date.now()>=deadline-150,'not started before deadline');
   assert.equal(state(fallback.conn).actors.filter((a:any)=>a.kind==='hero'&&a.bot).length,1);
-  console.log('PASS: server-owned 15 second timeout starts a bot opponent');
+  console.log('PASS: server-owned 60 second timeout starts a bot opponent');
 
   const seeker=await connect();await enter(seeker.conn);
   await until(()=>offers(seeker.conn).some(o=>o.room===session(fallback.conn).room),'mid-game offer');
@@ -63,7 +65,7 @@ try {
   assert.equal(offer.blueScore,state(seeker.conn,offer.room).heroScore.blue);
   await seeker.conn.reducers.quickPreference({humanOnly:true});
   await until(()=>queue(seeker.conn)?.humanOnly===true,'keep waiting preference');
-  await delay(15500);
+  await delay(60500);
   assert.equal(lobby(seeker.conn)?.started,false,'human-only search does not fall back');
   assert.ok(offers(seeker.conn).some(o=>o.room===offer.room),'offer remains available');
   await seeker.conn.reducers.joinRunningMatch({room:offer.room});

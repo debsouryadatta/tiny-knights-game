@@ -1,6 +1,6 @@
 # Quick Play and victory rules
 
-Quick Play creates a frozen public lobby and searches for a waiting human. Two online waiting players start immediately. If nobody joins within 15 seconds, the server starts a bot match.
+Quick Play creates a frozen public lobby and searches for a waiting human. Two online waiting players start immediately. If nobody joins within 60 seconds, the server starts a bot match.
 
 The waiting screen lists ongoing public matches with hero-kill score, elapsed time and available side. Joining one requires an explicit click. The server rechecks availability atomically; a stale offer must not remove the player's existing search. Private rooms, finished games, full games, offline-only games and disconnected players' reserved seats are excluded.
 

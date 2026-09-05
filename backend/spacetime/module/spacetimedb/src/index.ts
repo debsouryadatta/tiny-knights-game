@@ -159,7 +159,7 @@ export const enterLobby = db.reducer({ ...draftParams, mode: t.string() }, (ctx,
   if(!ctx.db.room_lobby.room.find(room)) {
     const member=ctx.db.membership.identity.find(ctx.sender)!;
     ctx.db.room_lobby.insert({room,publicMatch:args.mode==='quick',started:args.mode==='join',hostPlayerId:member.playerId,readyPlayers:'[]'});
-    if(args.mode==='quick')ctx.db.quick_queue.insert({room,deadlineMicros:ctx.timestamp.microsSinceUnixEpoch+15_000_000n,humanOnly:false});
+    if(args.mode==='quick')ctx.db.quick_queue.insert({room,deadlineMicros:ctx.timestamp.microsSinceUnixEpoch+60_000_000n,humanOnly:false});
   } else if(args.mode==='quick') {
     const lobby=ctx.db.room_lobby.room.find(room)!;
     ctx.db.room_lobby.room.update({...lobby,started:true});
@@ -171,7 +171,7 @@ export const quickPreference = db.reducer({ humanOnly: t.bool() }, (ctx, args) =
   const member=ctx.db.membership.identity.find(ctx.sender);
   const queue=member&&ctx.db.quick_queue.room.find(member.room);
   if(!queue)throw new SenderError('No active Quick Play search.');
-  ctx.db.quick_queue.room.update({...queue,humanOnly:args.humanOnly,deadlineMicros:args.humanOnly?queue.deadlineMicros:ctx.timestamp.microsSinceUnixEpoch+15_000_000n});
+  ctx.db.quick_queue.room.update({...queue,humanOnly:args.humanOnly,deadlineMicros:args.humanOnly?queue.deadlineMicros:ctx.timestamp.microsSinceUnixEpoch+60_000_000n});
 });
 export const playQuickBot = db.reducer(ctx => {
   const member=ctx.db.membership.identity.find(ctx.sender);
