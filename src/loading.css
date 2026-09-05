@@ -1,0 +1,13 @@
+#loading { position: relative; z-index: 30; font: 13px/1.45 system-ui, sans-serif; }
+#draft #loading { width: 100%; margin: 0 0 14px; padding: 12px 14px; border-color: #87977c55; background: #10262dcc; border-radius: 8px; }
+.load-heading { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+#load-count { color: #c8b679; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#loading progress { display: block; height: 8px; margin: 9px 0; border: 0; border-radius: 8px; overflow: hidden; background: #29414a; }
+#loading progress::-webkit-progress-bar { background: #29414a; }
+#loading progress::-webkit-progress-value { background: #d6bb78; }
+#loading progress::-moz-progress-bar { background: #d6bb78; }
+#loading #load-detail { margin: 5px 0 0; color: #c7d3cb; font-size: 12px; }
+#loading[data-failed="true"] { border-color: #e29986; }
+#load-retry { margin-top: 10px; min-height: 44px; border: 1px solid #d6bb78; border-radius: 6px; color: #f5edcf; background: #28454e; cursor: pointer; }
+#loading[data-complete="true"] progress { display: none; }
+@media (max-height: 480px) { #draft #loading { padding: 8px 12px; margin-bottom: 8px; } }
