@@ -1,3 +1,4 @@
+import {enterFullscreen, isIPhone, isStandalone, showInstallGuide} from './fullscreen.js';
 /** Fullscreen must begin in a user gesture. Unsupported browsers remain playable. */
 export function installMobilePlayPrompt() {
   const host=document.querySelector('.join-heading');
@@ -10,20 +11,26 @@ export function installMobilePlayPrompt() {
   const start=panel.querySelector('#mobile-play-start'),tip=panel.querySelector('p');
   const refresh=()=>{
     const mobile=matchMedia('(pointer: coarse)').matches&&Math.min(innerWidth,innerHeight)<=900;
-    panel.hidden=dismissed||!mobile;
+    panel.hidden=dismissed||!mobile||(isStandalone()&&innerWidth>innerHeight);
+    if(isIPhone()&&!isStandalone()){
+      tip.textContent='Play without browser bars. Add Tiny Knights to your Home Screen. No App Store download.';
+      start.textContent='Add to Home Screen';return;
+    }
+    if(isStandalone()){
+      tip.textContent='Turn your phone sideways to play. Turn off Portrait Orientation Lock if needed.';
+      start.textContent='Check orientation';return;
+    }
     if(!attempted)start.textContent=innerWidth>innerHeight?'Play fullscreen':'Play in landscape';
   };
   const dismiss=()=>{dismissed=true;refresh();};
   const enter=async()=>{
+    if(isIPhone()&&!isStandalone()){showInstallGuide();return;}
     if(busy)return;busy=true;start.disabled=true;attempted=true;
     try{
-      if(!document.fullscreenElement){
-        if(!document.documentElement.requestFullscreen)throw new Error('unsupported');
-        await document.documentElement.requestFullscreen();
-      }
+      await enterFullscreen();
       try{await screen.orientation.lock('landscape');}catch{/* iOS and some browsers cannot lock. */}
       if(innerWidth>innerHeight){dismiss();return;}
-      tip.textContent='Fullscreen is open. Rotate your device sideways; enable auto-rotate if needed.';
+      tip.textContent='Rotate your device sideways; enable auto-rotate if needed.';
       start.textContent='Try landscape again';
     }catch{
       tip.textContent='This browser cannot open fullscreen here. Rotate your device sideways, or continue in portrait.';

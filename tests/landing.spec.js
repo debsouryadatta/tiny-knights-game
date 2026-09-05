@@ -1,5 +1,45 @@
 import {test,expect} from '@playwright/test';
 
+test('iPhone Home Screen guide and installed mode',async({page},info)=>{
+  test.skip(info.project.name==='desktop');
+  await page.addInitScript(()=>{
+    Object.defineProperty(navigator,'userAgent',{get:()=> 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)'});
+    Element.prototype.requestFullscreen=undefined;
+  });
+  await page.goto('/');
+  await expect(page.locator('#mobile-play-start')).toHaveText('Add to Home Screen');
+  await page.locator('#mobile-play-start').click();
+  await expect(page.getByRole('dialog')).toContainText('Open as Web App');
+  await expect(page.getByRole('dialog')).toContainText('Internet is required');
+  await page.getByRole('button',{name:'Got it',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.locator('input[name="name"]').fill('iPhone tester');
+  await page.locator('#create-room').click();
+  await page.locator('#lobby-start').click();
+  await expect(page.locator('#join-screen')).toBeHidden();
+  await page.locator('#fullscreen').click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(await page.locator('#install-guide').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+  await page.getByRole('button',{name:'Got it',exact:true}).click();
+  await expect(page.locator('#join-screen')).toBeHidden();
+  await page.evaluate(()=>{Object.defineProperty(navigator,'standalone',{configurable:true,get:()=>true});});
+  await page.setViewportSize({width:844,height:390});
+  await page.evaluate(()=>dispatchEvent(new Event('resize')));
+  await expect(page.locator('.mobile-play-prompt')).toBeHidden();
+  expect(await page.evaluate(async()=> (await import('/src/fullscreen.js')).enterFullscreen())).toBe('standalone');
+  await page.evaluate(()=>{Object.defineProperty(navigator,'standalone',{get:()=>false});const original=window.matchMedia;window.matchMedia=q=>q==='(display-mode: standalone)'?{matches:true}:original(q);});
+  expect(await page.evaluate(async()=> (await import('/src/fullscreen.js')).enterFullscreen())).toBe('standalone');
+});
+
+test('Home Screen manifest and app icons are served',async({request})=>{
+  const response=await request.get('/manifest.webmanifest');expect(response.ok()).toBe(true);
+  const manifest=await response.json();expect(manifest.display).toBe('standalone');expect(manifest.start_url).toBe('/');
+  for(const path of ['/icons/apple-touch-icon.png',...manifest.icons.map(i=>i.src)]){
+    const icon=await request.get(path);expect(icon.ok()).toBe(true);expect(icon.headers()['content-type']).toContain('image/png');
+  }
+  const html=await (await request.get('/')).text();expect(html).toContain('apple-mobile-web-app-capable');
+});
+
 test('mobile landscape prompt uses a gesture and handles unsupported fullscreen',async({page},info)=>{
   test.skip(info.project.name==='desktop');
   await page.addInitScript(()=>{
@@ -22,7 +62,7 @@ test('supported mobile APIs request fullscreen then landscape, and rotation clea
   await page.addInitScript(()=>{
     window.mobileCalls=[];
     Element.prototype.requestFullscreen=async()=>{window.mobileCalls.push('fullscreen');Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>document.documentElement});};
-    Object.defineProperty(screen.orientation,'lock',{configurable:true,value:async mode=>{window.mobileCalls.push(mode);}});
+    Object.defineProperty(screen,'orientation',{configurable:true,value:{lock:async mode=>{window.mobileCalls.push(mode);}}});
   });
   await page.goto('/');await page.locator('#mobile-play-start').click();
   expect(await page.evaluate(()=>window.mobileCalls)).toEqual(['fullscreen','landscape']);
