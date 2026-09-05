@@ -1,17 +1,17 @@
 import {enterFullscreen, isIPhone, isStandalone, showInstallGuide} from './fullscreen.js';
 /** Fullscreen must begin in a user gesture. Unsupported browsers remain playable. */
 export function installMobilePlayPrompt() {
-  const host=document.querySelector('.join-heading');
+  const host=document.body;
   if(!host)return()=>{};
   const panel=document.createElement('section');panel.className='mobile-play-prompt';panel.hidden=true;
   panel.setAttribute('aria-label','Mobile play settings');
   panel.innerHTML='<p id="mobile-play-tip">Best played sideways. Tap to enter fullscreen and request landscape mode.</p><div><button type="button" id="mobile-play-start">Play in landscape</button><button type="button" id="mobile-play-dismiss">Not now</button></div>';
   host.append(panel);
-  let dismissed=false,busy=false,attempted=false;
+  let dismissed=false,busy=false,attempted=false,eligible=false;
   const start=panel.querySelector('#mobile-play-start'),tip=panel.querySelector('p');
   const refresh=()=>{
     const mobile=matchMedia('(pointer: coarse)').matches&&Math.min(innerWidth,innerHeight)<=900;
-    panel.hidden=dismissed||!mobile||(isStandalone()&&innerWidth>innerHeight);
+    panel.hidden=!eligible||dismissed||!mobile||(isStandalone()&&innerWidth>innerHeight);
     if(isIPhone()&&!isStandalone()){
       tip.textContent='Play without browser bars. Add Tiny Knights to your Home Screen. No App Store download.';
       start.textContent='Add to Home Screen';return;
@@ -24,7 +24,7 @@ export function installMobilePlayPrompt() {
   };
   const dismiss=()=>{dismissed=true;refresh();};
   const enter=async()=>{
-    if(isIPhone()&&!isStandalone()){showInstallGuide();return;}
+    if(isIPhone()&&!isStandalone()){dismiss();showInstallGuide();return;}
     if(busy)return;busy=true;start.disabled=true;attempted=true;
     try{
       await enterFullscreen();
@@ -40,5 +40,9 @@ export function installMobilePlayPrompt() {
   start.addEventListener('click',enter);panel.querySelector('#mobile-play-dismiss').addEventListener('click',dismiss);
   const resize=()=>{if(attempted&&document.fullscreenElement&&innerWidth>innerHeight)dismiss();else refresh();};
   window.addEventListener('resize',resize);refresh();
-  return()=>{window.removeEventListener('resize',resize);panel.remove();};
+  const entry=()=>{eligible=true;refresh();};
+  const reset=()=>{eligible=false;refresh();};
+  window.addEventListener('mobile-play-entry',entry);
+  window.addEventListener('mobile-play-reset',reset);
+  return()=>{window.removeEventListener('resize',resize);window.removeEventListener('mobile-play-entry',entry);window.removeEventListener('mobile-play-reset',reset);panel.remove();};
 }

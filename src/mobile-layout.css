@@ -10,7 +10,8 @@
   --hud-bottom: max(24px, var(--safe-bottom));
 }
 .hero-stack { display: contents; }
-.mobile-play-prompt { margin: 8px 0; padding: 8px 10px; border: 1px solid #e7c47755; border-radius: 4px; background: #081827e8; }
+.mobile-play-prompt { position:fixed;z-index:50;left:50%;bottom:max(12px,env(safe-area-inset-bottom));transform:translateX(-50%);box-sizing:border-box;width:min(90vw,420px);max-height:70dvh;overflow:auto;margin:0;padding:12px;border:1px solid #e7c47755;border-radius:8px;background:#081827f5;box-shadow:0 8px 30px #0008; }
+.landing-credits { position:fixed;z-index:45;top:max(8px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;align-items:center;min-height:44px;padding:0 12px;color:#e7c477;background:#081827e8;border-radius:8px;font:13px system-ui,sans-serif;text-underline-offset:4px; }
 .mobile-play-prompt p { font-size: 11px; line-height: 1.4; color: #cbd6de; margin: 0 0 6px; }
 .mobile-play-prompt > div { display: flex; gap: 8px; flex-wrap: wrap; }
 .mobile-play-prompt button { min-height: 44px; padding: 8px 12px; font-size: 12px; }

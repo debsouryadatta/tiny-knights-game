@@ -1,5 +1,26 @@
 import {test,expect} from '@playwright/test';
 
+test('Credits sits top-right and mobile prompt waits for valid entry actions',async({page},info)=>{
+  for(const mode of ['quick-play','create-room','join']){
+    await page.goto('/');
+    await expect(page.locator('.mobile-play-prompt')).toBeHidden();
+    const credits=page.getByRole('link',{name:'Credits',exact:true});
+    const box=await credits.boundingBox();const viewport=page.viewportSize();
+    expect(box.x+box.width).toBeGreaterThan(viewport.width-40);expect(box.y).toBeLessThan(40);
+    await page.locator('#'+mode).click();
+    await expect(page.locator('.mobile-play-prompt')).toBeHidden();
+    await page.locator('input[name="name"]').fill('Entry tester');
+    if(mode==='join')await page.locator('input[name="room"]').fill('ENTRYTEST');
+    await page.locator('#'+mode).click();
+    if(info.project.name==='desktop')await expect(page.locator('.mobile-play-prompt')).toBeHidden();
+    else {
+      await expect(page.locator('.mobile-play-prompt')).toBeVisible();
+      await page.locator('#mobile-play-dismiss').click();
+      await expect(page.locator('.mobile-play-prompt')).toBeHidden();
+    }
+  }
+});
+
 test('iPhone Home Screen guide and installed mode',async({page},info)=>{
   test.skip(info.project.name==='desktop');
   await page.addInitScript(()=>{
@@ -7,14 +28,15 @@ test('iPhone Home Screen guide and installed mode',async({page},info)=>{
     Element.prototype.requestFullscreen=undefined;
   });
   await page.goto('/');
+  await expect(page.locator('.mobile-play-prompt')).toBeHidden();
+  await page.locator('input[name="name"]').fill('iPhone tester');
+  await page.locator('#create-room').click();
   await expect(page.locator('#mobile-play-start')).toHaveText('Add to Home Screen');
   await page.locator('#mobile-play-start').click();
   await expect(page.getByRole('dialog')).toContainText('Open as Web App');
   await expect(page.getByRole('dialog')).toContainText('Internet is required');
   await page.getByRole('button',{name:'Got it',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.locator('input[name="name"]').fill('iPhone tester');
-  await page.locator('#create-room').click();
   await page.locator('#lobby-start').click();
   await expect(page.locator('#join-screen')).toBeHidden();
   await page.locator('#fullscreen').click();
@@ -47,6 +69,9 @@ test('mobile landscape prompt uses a gesture and handles unsupported fullscreen'
     Element.prototype.requestFullscreen=async()=>{window.fullscreenRequests++;throw new Error('Unsupported');};
   });
   await page.goto('/');
+  await expect(page.locator('.mobile-play-prompt')).toBeHidden();
+  await page.locator('input[name="name"]').fill('Rotate tester');
+  await page.locator('#create-room').click();
   await expect(page.locator('.mobile-play-prompt')).toBeVisible();
   expect(await page.evaluate(()=>window.fullscreenRequests)).toBe(0);
   await page.locator('#mobile-play-start').click();
@@ -54,7 +79,7 @@ test('mobile landscape prompt uses a gesture and handles unsupported fullscreen'
   await expect(page.locator('#mobile-play-tip')).toContainText('Rotate your device');
   await page.locator('#mobile-play-dismiss').click();
   await expect(page.locator('.mobile-play-prompt')).toBeHidden();
-  await expect(page.locator('input[name="name"]')).toBeVisible();
+  await expect(page.locator('#waiting-lobby')).toBeVisible();
 });
 
 test('supported mobile APIs request fullscreen then landscape, and rotation clears prompt',async({page},info)=>{
@@ -64,7 +89,7 @@ test('supported mobile APIs request fullscreen then landscape, and rotation clea
     Element.prototype.requestFullscreen=async()=>{window.mobileCalls.push('fullscreen');Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>document.documentElement});};
     Object.defineProperty(screen,'orientation',{configurable:true,value:{lock:async mode=>{window.mobileCalls.push(mode);}}});
   });
-  await page.goto('/');await page.locator('#mobile-play-start').click();
+  await page.goto('/');await page.locator('input[name="name"]').fill('Fullscreen tester');await page.locator('#create-room').click();await page.locator('#mobile-play-start').click();
   expect(await page.evaluate(()=>window.mobileCalls)).toEqual(['fullscreen','landscape']);
   await page.setViewportSize({width:844,height:390});
   await expect(page.locator('.mobile-play-prompt')).toBeHidden();
@@ -103,6 +128,7 @@ test('empty names are rejected; landing counter updates only after starting a ga
     await player.locator('input[name="name"]').fill('Counter tester');
     await player.locator('#create-room').click();
     await expect(player.locator('#waiting-lobby')).toBeVisible();
+    if(await player.locator('.mobile-play-prompt').isVisible())await player.locator('#mobile-play-dismiss').click();
     expect(await count()).toBe(initial);
     await player.locator('#lobby-start').click();
     await expect(player.locator('#join-screen')).toBeHidden();

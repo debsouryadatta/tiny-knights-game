@@ -60,6 +60,7 @@ for(const [width,height] of sizes)test(`mobile draft, private lobby and combat r
     await page.setViewportSize({width,height});
     await enterPlayerName(page);await page.locator('#create-room').click();
     await expect(page.locator('#waiting-lobby')).toBeVisible();
+    if(await page.locator('.mobile-play-prompt').isVisible())await page.locator('#mobile-play-dismiss').click();
     for(const selector of ['#lobby-copy','#lobby-start','#lobby-leave'])await reachable(page,selector,width,height);
     await expect(page.locator('#lobby-roster')).toContainText('Long Commander 123');
     await page.screenshot({path:info.outputPath('waiting-lobby.png')});
