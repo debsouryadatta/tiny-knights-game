@@ -1,4 +1,4 @@
-export const COMPANION_ORDERS = ['gather', 'escort', 'attack', 'defend'];
+export const COMPANION_ORDERS = ['gather_wood', 'gather_gold', 'gather', 'escort', 'attack', 'defend'];
 
 function tool(name, description) {
   return { name, description, parameters: { type: 'object', properties: {} } };
@@ -8,9 +8,17 @@ export const FOLLOW_HERO_TOOL = tool(
   'follow_hero',
   'Walk to the player and stay beside them. Use when they say come to me, come back, follow me, stay with me, I need help, or help me. Not for gathering resources.',
 );
+export const GATHER_WOOD_TOOL = tool(
+  'gather_wood',
+  'Collect wood only. Use when they say chop trees, get wood, farm wood, or gather wood. Do not use this for gold.',
+);
+export const GATHER_GOLD_TOOL = tool(
+  'gather_gold',
+  'Collect gold only. Use when they say get gold, mine gold, farm gold, or gather gold. Do not use this for wood.',
+);
 export const GATHER_RESOURCES_TOOL = tool(
   'gather_resources',
-  'Collect wood and gold. Use when they say gather, farm, chop trees, or get gold.',
+  'Collect whichever resource the team needs. Use when they say gather or farm without naming wood or gold.',
 );
 export const PUSH_LANE_TOOL = tool(
   'push_lane',
@@ -22,7 +30,7 @@ export const DEFEND_BASE_TOOL = tool(
 );
 export const SET_ORDER_TOOL = {
   name: 'set_order',
-  description: 'Set the companion standing order when the player names gather, escort, attack, or defend.',
+  description: 'Set the companion standing order when the player names gather wood, gather gold, gather, escort, attack, or defend.',
   parameters: {
     type: 'object',
     properties: {
@@ -38,6 +46,8 @@ export const SET_ORDER_TOOL = {
 
 export const COMPANION_TOOLS = [
   FOLLOW_HERO_TOOL,
+  GATHER_WOOD_TOOL,
+  GATHER_GOLD_TOOL,
   GATHER_RESOURCES_TOOL,
   PUSH_LANE_TOOL,
   DEFEND_BASE_TOOL,
@@ -46,6 +56,8 @@ export const COMPANION_TOOLS = [
 
 const TOOL_ORDERS = {
   follow_hero: 'escort',
+  gather_wood: 'gather_wood',
+  gather_gold: 'gather_gold',
   gather_resources: 'gather',
   push_lane: 'attack',
   defend_base: 'defend',
@@ -78,7 +90,9 @@ const SPEECH_PHRASES = [
       'help',
     ],
   ],
-  ['gather', ['go farm', 'gather', 'chop trees', 'get wood', 'get gold', 'farm', 'harvest']],
+  ['gather_wood', ['chop trees', 'chop wood', 'get wood', 'farm wood', 'gather wood', 'collect wood', 'go farm wood']],
+  ['gather_gold', ['get gold', 'mine gold', 'farm gold', 'gather gold', 'collect gold', 'go farm gold']],
+  ['gather', ['go farm', 'gather', 'farm', 'harvest']],
   ['attack', ['push lane', 'attack', 'push', 'fight', 'gank']],
   ['defend', ['go home', 'hold the base', 'hold base', 'back to base', 'fountain', 'defend']],
 ];

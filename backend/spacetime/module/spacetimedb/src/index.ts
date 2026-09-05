@@ -164,7 +164,7 @@ export const issueCommand = db.reducer({ type: t.string(), x: t.f64(), y: t.f64(
   if (ctx.timestamp.microsSinceUnixEpoch - member.lastCommandMicros < 30_000n) throw new SenderError('Commands sent too quickly.');
   if (!['move', 'gather', 'attack', 'ability', 'build', 'order', 'recall'].includes(args.type)) throw new SenderError('Invalid command.');
   if (!Number.isFinite(args.x) || !Number.isFinite(args.y)) throw new SenderError('Invalid coordinates.');
-  if (args.type === 'order' && !['gather', 'escort', 'attack', 'defend'].includes(args.order)) throw new SenderError('Invalid order.');
+  if (args.type === 'order' && !['gather', 'gather_wood', 'gather_gold', 'escort', 'attack', 'defend'].includes(args.order)) throw new SenderError('Invalid order.');
   const row = ctx.db.match_state.room.find(member.room);
   if (!row) throw new SenderError('Match unavailable.');
   const state: GameState = JSON.parse(row.snapshot);

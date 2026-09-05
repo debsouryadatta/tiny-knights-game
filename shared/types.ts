@@ -1,7 +1,7 @@
 export type Team = 'blue' | 'red';
 export type HeroKind = 'knight' | 'ranger' | 'lancer';
 export type CompanionKind = 'harvester' | 'guardian' | 'scout';
-export type Order = 'gather' | 'escort' | 'attack' | 'defend';
+export type Order = 'gather' | 'gather_wood' | 'gather_gold' | 'escort' | 'attack' | 'defend';
 export type ResourceKind = 'wood' | 'gold';
 export type Vec = { x: number; y: number };
 export interface Actor { sprintUntil?:number; }

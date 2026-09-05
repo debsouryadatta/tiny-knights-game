@@ -7,10 +7,10 @@ import {
   parseCompanionLine,
 } from './companion-order.js';
 
-test('schema exposes follow/gather/push/defend tools plus set_order', () => {
+test('schema exposes follow/wood/gold/gather/push/defend tools plus set_order', () => {
   assert.deepEqual(
     COMPANION_TOOLS.map((tool) => tool.name),
-    ['follow_hero', 'gather_resources', 'push_lane', 'defend_base', 'set_order'],
+    ['follow_hero', 'gather_wood', 'gather_gold', 'gather_resources', 'push_lane', 'defend_base', 'set_order'],
   );
 });
 
@@ -35,14 +35,30 @@ test('welcome does not match come', () => {
   assert.deepEqual(companionOrderFromSpeech('welcome'), { ok: false, reason: 'empty' });
 });
 
+test('chop trees is wood, get gold is gold, go farm stays generic gather', () => {
+  assert.equal(companionOrderFromSpeech('chop trees').command.order, 'gather_wood');
+  assert.equal(companionOrderFromSpeech('get wood').command.order, 'gather_wood');
+  assert.equal(companionOrderFromSpeech('get gold').command.order, 'gather_gold');
+  assert.equal(companionOrderFromSpeech('mine gold').command.order, 'gather_gold');
+  assert.equal(companionOrderFromSpeech('go farm').command.order, 'gather');
+});
+
 test('maps follow_hero and set_order payloads', () => {
   assert.deepEqual(companionCommandFromNeedle([{ name: 'follow_hero', arguments: {} }]), {
     ok: true,
     command: { type: 'order', order: 'escort' },
   });
-  assert.deepEqual(companionCommandFromNeedle('[{"name":"set_order","arguments":{"order":"gather"}}]'), {
+  assert.deepEqual(companionCommandFromNeedle([{ name: 'gather_wood', arguments: {} }]), {
     ok: true,
-    command: { type: 'order', order: 'gather' },
+    command: { type: 'order', order: 'gather_wood' },
+  });
+  assert.deepEqual(companionCommandFromNeedle([{ name: 'gather_gold', arguments: {} }]), {
+    ok: true,
+    command: { type: 'order', order: 'gather_gold' },
+  });
+  assert.deepEqual(companionCommandFromNeedle('[{"name":"set_order","arguments":{"order":"gather_wood"}}]'), {
+    ok: true,
+    command: { type: 'order', order: 'gather_wood' },
   });
 });
 
