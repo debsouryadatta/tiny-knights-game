@@ -5,7 +5,7 @@ test('bot button starts a match immediately without selecting human-only waiting
  await page.goto('/');await enterPlayerName(page);await page.locator('#quick-play').click();
  await expect(page.locator('#quick-queue')).toBeVisible();
  if(await page.locator('.mobile-play-prompt').isVisible())await page.locator('#mobile-play-dismiss').click();
- await expect(page.locator('#quick-countdown')).toContainText('until remaining seats use bots');
+ await expect(page.locator('#quick-countdown')).toContainText('until a bot match starts');
  await expect(page.locator('#quick-bot')).toBeVisible();
  await page.locator('#quick-bot').click();
  await expect(page.locator('#join-screen')).toBeHidden({timeout:5000});
@@ -17,7 +17,7 @@ test('live offer refresh removes every stale game and preserves focused choices'
  await page.evaluate(async()=>{
  const {createUI}=await import('/src/ui.js');const {createGame,addPlayer}=await import('/shared/simulation.ts');
  const state=createGame('QUEUE'),playerId=addPlayer(state,{name:'QA',hero:'knight',companion:'guardian',size:1});
- const client={status:'connected',state,roster:[{playerId,online:true}],command(){},lobby:{started:false,publicMatch:true,hostPlayerId:playerId,readyPlayers:'[]'},quickQueue:{humanOnly:true,deadlineMicros:0n},quickOffers:['A','B','C'].map(room=>({room,blueScore:2,redScore:1,elapsed:50,side:'red'}))};
+ const client={status:'connected',command(){},lobby:{started:false,publicMatch:true,hostPlayerId:playerId,readyPlayers:'[]'},quickQueue:{humanOnly:true,deadlineMicros:0n},quickOffers:['A','B','C'].map(room=>({room,blueScore:2,redScore:1,elapsed:50,side:'red'}))};
  const audio={getStats:()=>({enabled:true}),subscribe:()=>()=>{}};const ui=createUI({client,audio});
  const update=()=>ui.update(state,{playerId,room:'QUEUE'},'connected');update();window.queueFixture={client,update};
  });
@@ -35,7 +35,7 @@ test('Quick Play offers explicit mid-game consent, human-only waiting, and bot f
  const newPlayer=async()=>{const context=await browser.newContext({baseURL,viewport:{width:844,height:390},isMobile:true,hasTouch:true});contexts.push(context);const page=await context.newPage();await page.goto('/');return page;};
  try{
   const first=await newPlayer();await enterPlayerName(first);await first.locator('#quick-play').click();if(await first.locator('.mobile-play-prompt').isVisible())await first.locator('#mobile-play-dismiss').click();
-  await expect(first.locator('#quick-queue')).toBeVisible();await expect(first.locator('#quick-countdown')).toContainText('until remaining seats use bots');
+  await expect(first.locator('#quick-queue')).toBeVisible();await expect(first.locator('#quick-countdown')).toContainText('until a bot match starts');
   await expect(first.locator('#quick-countdown')).toContainText(/(?:5\d|60)s/);
   await expect(first.locator('#join-screen')).toBeHidden({timeout:65000});
   const originalRoom=await first.evaluate(()=>window.realm.state.room);
@@ -43,7 +43,7 @@ test('Quick Play offers explicit mid-game consent, human-only waiting, and bot f
   await expect(second.locator('#quick-queue')).toBeVisible();
   const offer=second.locator(`.quick-offer[data-room="${originalRoom}"]`);
   await expect(offer).toContainText(/Blue \d+ – \d+ Red/);
-  await second.locator('#quick-wait').click();await expect(second.locator('#quick-countdown')).toContainText('Waiting for humans');
+  await second.locator('#quick-wait').click();await expect(second.locator('#quick-countdown')).toContainText('may take a little longer');
   await expect(second.locator('#quick-bot')).toBeVisible();
   await second.waitForTimeout(61000);await expect(second.locator('#quick-queue')).toBeVisible();
   await offer.locator('button').click();await expect(second.locator('#join-screen')).toBeHidden();

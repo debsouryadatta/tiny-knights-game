@@ -8,7 +8,7 @@ test('Quick Play stands above the private-room options with simple labels', asyn
   await expect(quick).toHaveText('Quick Play');
   await expect(join).toHaveText('Join Room');
   await expect(create).toHaveText('Create Room');
-  const boxes = await Promise.all([quick, join, create, page.locator('[data-choice="size"]')].map(button => button.boundingBox()));
+  const boxes = await Promise.all([quick, join, create].map(button => button.boundingBox()));
   expect(boxes[0].y + boxes[0].height).toBeLessThanOrEqual(Math.min(boxes[1].y, boxes[2].y));
   for (const box of boxes) {
     expect(box.height).toBeGreaterThanOrEqual(44);

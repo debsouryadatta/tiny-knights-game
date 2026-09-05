@@ -20,11 +20,8 @@ import {
   spawnFor,
   resourceSeeds,
   laneWaypoints,
-  LANES,
-  LANE_NAMES,
 } from "./map";
 
-const MAP_VERSION = 2;
 const distance = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
 const key = (p: Vec) => Math.round(p.y) * WIDTH + Math.round(p.x);
 const opposite = (team: Team): Team => (team === "blue" ? "red" : "blue");
@@ -148,17 +145,10 @@ function actor(
     lane: 1,
   };
 }
-function heroSlot(a: Actor): number {
-  return Number((a.ownerId ?? a.id).match(/-hero-(\d+)$/)?.[1] ?? 0);
-}
-function laneForSlot(size: number, slot: number): number {
-  return size === 1 ? 1 : size === 2 ? slot * 2 : slot;
-}
 export function createGame(room: string, size: number = 1): GameState {
-  if (size !== 1 && size !== 2 && size !== 3) throw new Error("Team size must be 1, 2 or 3.");
+  if (size !== 1) throw new Error("Only 1v1 matches are supported.");
   const s: GameState = {
     room,
-    mapVersion: MAP_VERSION,
     size,
     tick: 0,
     elapsed: 0,
@@ -194,8 +184,7 @@ export function createGame(room: string, size: number = 1): GameState {
         nearestFree(s, spawnFor(team, i * 2)),
         (["knight", "ranger", "lancer"] as const)[i],
       );
-      a.lane = laneForSlot(size, i);
-      a.lastAction = `${LANE_NAMES[a.lane]} lane · push with your minions`;
+      a.lane = 1;
       s.actors.push(a);
       const c = actor(
         `${id}-agent`,
@@ -205,32 +194,21 @@ export function createGame(room: string, size: number = 1): GameState {
         (["harvester", "guardian", "scout"] as const)[i],
         id,
       );
-      c.lane = a.lane;
+      c.lane = 1;
       s.actors.push(c);
     }
   }
   memory(s);
   return s;
 }
-/** Shared by allocation and public offers so the advertised team is accurate. */
-export function availablePlayerSlot(s: GameState, reserved: ReadonlySet<string> = new Set()): Actor | undefined {
-  const heroes = s.actors.filter(a => a.kind === 'hero');
-  const occupied = (a: Actor) => !a.bot || reserved.has(a.id);
-  const count = (team: Team) => heroes.filter(a => a.team === team && occupied(a)).length;
-  const team = count('blue') <= count('red') ? 'blue' : 'red';
-  return heroes.find(a => a.team === team && !occupied(a)) ?? heroes.find(a => !occupied(a));
-}
-export function addPlayer(s: GameState, draft: Draft, preferredId?: string): string {
-  if (![1, 2, 3].includes(s.size) || draft.size !== s.size) throw new Error("Team size must match the room.");
+export function addPlayer(s: GameState, draft: Draft): string {
+  if (s.size !== 1 || draft.size !== 1) throw new Error("Only 1v1 matches are supported.");
   if (s.phase !== "playing") throw new Error("This match has ended.");
-  const a = preferredId
-    ? s.actors.find(a => a.kind === 'hero' && a.id === preferredId && a.bot)
-    : availablePlayerSlot(s);
+  const a = s.actors.find((a) => a.kind === "hero" && a.bot);
   if (!a) throw new Error("Match is full.");
   // A friend takes over the bot's slot at base with fresh controls and cooldowns.
   cancelBuild(s,a);
-  const fresh = actor(a.id, a.team, nearestFree(s, spawnFor(a.team, heroSlot(a) * 2), a.id), draft.hero);
-  fresh.lane = laneForSlot(s.size, heroSlot(a));
+  const fresh = actor(a.id, a.team, nearestFree(s, spawnFor(a.team, 0), a.id), draft.hero);
   fresh.xp = a.xp ?? 0;
   fresh.level = heroLevel(fresh.xp);
   fresh.hp = fresh.maxHp = heroMaxHp(draft.hero, fresh.level);
@@ -244,12 +222,10 @@ export function addPlayer(s: GameState, draft: Draft, preferredId?: string): str
   fresh.name = (draft.name.trim() || "Commander").slice(0, 24);
   fresh.protectedUntil=s.elapsed+SPAWN_PROTECTION;
   fresh.order = "escort";
-  fresh.lastAction = `${LANE_NAMES[fresh.lane]} lane · push with your minions`;
+  fresh.lastAction = "Awaiting your command";
   memory(s).modes[a.id] = "idle";
   const c = s.actors.find((c) => c.kind === "companion" && c.ownerId === a.id)!;
-  s.actors[s.actors.indexOf(c)] = actor(c.id, a.team, nearestFree(s, spawnFor(a.team, heroSlot(a) * 2 + 1), c.id), draft.hero, draft.companion, a.id);
-  const freshCompanion = s.actors.find(actor => actor.id === c.id)!;
-  freshCompanion.lane = fresh.lane;
+  s.actors[s.actors.indexOf(c)] = actor(c.id, a.team, nearestFree(s, spawnFor(a.team, 1), c.id), draft.hero, draft.companion, a.id);
   delete m.routes[c.id];
   delete m.modes[c.id];
   if (m.waypoints) delete m.waypoints[c.id];
@@ -390,7 +366,6 @@ export function applyCommand(
   if (!a) return { ok: false, error: "Player not found." };
   if (s.phase !== "playing") return { ok: false, error: "Match finished." };
   if (a.hp <= 0) return { ok: false, error: "Wait for respawn." };
-  normalizePlayerLanes(s);
   const m = memory(s);
   switch (c.type) {
     case 'steer': {
@@ -587,7 +562,7 @@ function pushTarget(s: GameState, a: Actor): Vec {
     for (let i = 2; i < points.length; i++)
       if (distance(a, points[i]) < distance(a, points[index])) index = i;
   }
-  if (distance(a, points[index]) < 1.5 && index < points.length - 1) index++;
+  if (distance(a, points[index]) < 3 && index < points.length - 1) index++;
   m.waypoints[a.id] = index;
   const point = points[index] ?? baseFor(opposite(a.team));
   if (a.kind !== 'creep' || index === points.length - 1) return point;
@@ -598,52 +573,11 @@ function pushTarget(s: GameState, a: Actor): Vec {
   const formation = { x: Math.round(point.x - dy / length * offset), y: Math.round(point.y + dx / length * offset) };
   return isWalkable(formation.x, formation.y) ? formation : point;
 }
-/** Upgrade square-map snapshots once while retaining room identity and match progress. */
-export function normalizeMap(s: GameState): void {
-  if (s.mapVersion === MAP_VERSION) return;
-  const project = (p: Vec): Vec => ({x: p.x * (WIDTH - 1) / 63, y: p.y * (HEIGHT - 1) / 63});
-  for (const a of s.actors) {
-    clearCombatControls(s, a);
-    Object.assign(a, project(a));
-  }
-  const structures = s.structures;
-  s.structures = [];
-  // Place cores first; towers are snapped around them and each other.
-  for (const t of [...structures].sort((a,b) => Number(b.kind === 'core') - Number(a.kind === 'core'))) {
-    Object.assign(t, t.kind === 'core' ? baseFor(t.team) : nearestFree(s, project(t)));
-    s.structures.push(t);
-  }
-  for (const a of s.actors) Object.assign(a, nearestFree(s, a, a.id));
-  const priorResources = new Map(s.resources.map(r => [r.id,r]));
-  s.resources = resourceSeeds().map((r,i) => {
-    const id = `resource-${i}`, prior = priorResources.get(id);
-    return {...r,id,amount:prior?.amount ?? 300,maxAmount:prior?.maxAmount ?? 300};
-  });
-  const m = memory(s);
-  m.routes = {}; m.waypoints = {};
-  s.effects = [];
-  s.mapVersion = MAP_VERSION;
-}
-export function normalizePlayerLanes(s: GameState): void {
-  normalizeMap(s);
-  const m = memory(s);
-  // Upgrade saved rooms from the single-lane version without stale navigation.
-  for (const a of s.actors) if (a.kind !== "creep") {
-    const lane = laneForSlot(s.size, heroSlot(a));
-    if (a.lane !== lane) {
-      a.lane = lane;
-      delete m.routes[a.id];
-      if (m.waypoints) delete m.waypoints[a.id];
-    }
-  }
-}
-
 export function stepGame(s: GameState, dt: number): void {
   if (s.phase !== "playing" || !Number.isFinite(dt) || dt <= 0) return;
   s.heroScore ??= {blue:0,red:0};
   dt = Math.min(dt, 0.5);
   const m = memory(s);
-  normalizePlayerLanes(s);
   // Old persisted rooms keep their health fraction, including dead actors.
   for(const a of s.actors)if(a.kind==='hero'){
     a.xp??=0;a.level=heroLevel(a.xp);
@@ -671,19 +605,18 @@ export function stepGame(s: GameState, dt: number): void {
   }
   s.actors = s.actors.filter((a) => a.kind !== "creep" || a.hp > 0);
   if (
-    s.elapsed >= 12 &&
-    Math.floor((s.elapsed - 12) / 30) > Math.floor((s.elapsed - dt - 12) / 30)
+    s.elapsed >= 45 &&
+    Math.floor((s.elapsed - 45) / 30) > Math.floor((s.elapsed - dt - 45) / 30)
   ) {
     for (const team of ["blue", "red"] as Team[])
-      for (const lane of LANES)
       for (const slot of [0, 1, 2] as const) {
         if (
-          s.actors.filter((a) => a.kind === "creep" && a.team === team && a.lane === lane)
+          s.actors.filter((a) => a.kind === "creep" && a.team === team)
             .length >= 12
         )
           continue;
         const c = actor(
-          `creep-${team}-${lane}-${slot}-${s.tick}`,
+          `creep-${team}-${slot}-${s.tick}`,
           team,
           nearestFree(s, spawnFor(team, slot * 2)),
           "knight",
@@ -691,7 +624,7 @@ export function stepGame(s: GameState, dt: number): void {
         c.kind = "creep";
         c.name = "Lane soldier";
         c.hp = c.maxHp = CREEP_HP;
-        c.lane = lane;
+        c.lane = 1;
         c.formationSlot = slot;
         c.order = "attack";
         s.actors.push(c);
@@ -711,7 +644,7 @@ export function stepGame(s: GameState, dt: number): void {
     if (a.hp <= 0) {
       cancelBuild(s,a);
       if (s.elapsed >= a.respawnAt) {
-        Object.assign(a, nearestFree(s, spawnFor(a.team, heroSlot(a) * 2 + (a.kind === "companion" ? 1 : 0)), a.id));
+        Object.assign(a, nearestFree(s, spawnFor(a.team, a.lane * 2), a.id));
         a.hp = a.maxHp;
         a.protectedUntil=s.elapsed+SPAWN_PROTECTION;
         a.lastAction = "Respawned";
@@ -734,7 +667,7 @@ export function stepGame(s: GameState, dt: number): void {
     if(a.recallUntil){
       if(s.elapsed>=a.recallUntil){
         const origin={x:a.x,y:a.y};
-        Object.assign(a,nearestFree(s,spawnFor(a.team,heroSlot(a)*2),a.id));a.hp=a.maxHp;
+        Object.assign(a,nearestFree(s,spawnFor(a.team,0),a.id));a.hp=a.maxHp;
         clearCombatControls(s,a);a.lastAction='Recalled to base';
         effect(s,origin,'recall',a.team,{x:a.x,y:a.y},{sourceId:a.id,targetId:a.id,style:'magic'});
         continue;
@@ -752,7 +685,6 @@ export function stepGame(s: GameState, dt: number): void {
             ? "attack"
             : "idle";
       const owner = s.actors.find((x) => x.id === a.ownerId);
-      if (owner) a.lane = owner.lane;
       if (a.order === "escort" && owner && owner.hp > 0) {
         const separation = distance(a, owner);
         if (separation < 1.5) {
@@ -765,12 +697,17 @@ export function stepGame(s: GameState, dt: number): void {
       if (a.order === "defend")
         a.target =
           distance(a, baseFor(a.team)) > 5
-            ? spawnFor(a.team, heroSlot(a) * 2 + 1)
+            ? spawnFor(a.team, a.lane * 2 + 1)
             : undefined;
     } else if (a.kind === "creep") {
       mode = "attack";
     } else if (a.bot) {
-      mode = s.elapsed < 12 ? "gather" : "attack";
+      mode =
+        s.elapsed < 24 ||
+        s.bank[a.team].wood < TOWER_COST.wood ||
+        s.bank[a.team].gold < TOWER_COST.gold
+          ? "gather"
+          : "attack";
       if (
         ai &&
         s.bank[a.team].wood >= TOWER_COST.wood &&
@@ -784,6 +721,7 @@ export function stepGame(s: GameState, dt: number): void {
         ])
           if (build(s, a, p).ok) break;
       }
+      if (s.elapsed > 55 && s.elapsed % 45 > 15) mode = "attack";
     }
     if(a.buildChannel)continue;
     if (mode === "gather") {

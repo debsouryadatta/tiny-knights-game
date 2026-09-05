@@ -12,7 +12,6 @@ test('draft exposes public, create, and code paths without starting a match',asy
  await page.locator('input[name="name"]').fill('Lobby Ranger');
  await enterPlayerName(page);await page.locator('#create-room').click();
  await expect(page.locator('#waiting-lobby')).toBeVisible();
- if(await page.locator('.mobile-play-prompt').isVisible())await page.locator('#mobile-play-dismiss').click();
  await expect(page.locator('#lobby-copy')).toHaveText(/^[A-F0-9]{6}$/);
  await expect(page.locator('#lobby-roster')).toContainText('Lobby Ranger');
  await expect(page.locator('#lobby-roster')).toContainText('ranger');
@@ -44,8 +43,8 @@ test('friend joins waiting room, readies, starts with host, and reconnects',asyn
 });
 
 test('Quick Play joins a public game and resumes the same identity',async({page})=>{
- await page.goto('/');await enterPlayerName(page);await page.locator('#quick-play').click();await expect(page.locator('#quick-bot')).toBeVisible();if(await page.locator('.mobile-play-prompt').isVisible())await page.locator('#mobile-play-dismiss').click();await page.locator('#quick-bot').click();await expect(page.locator('#join-screen')).toBeHidden();
- await expect(page.locator('#connection')).toContainText('1v1');
+ await page.goto('/');await enterPlayerName(page);await page.locator('#quick-play').click();await expect(page.locator('#join-screen')).toBeHidden({timeout:25000});
+ await expect(page.locator('#connection')).toHaveText('Public match');
  const session=await page.evaluate(()=>({id:window.realm.state.playerId,room:window.realm.state.room}));
  await page.reload();await enterPlayerName(page);await page.locator('#quick-play').click();await expect(page.locator('#join-screen')).toBeHidden();
  expect(await page.evaluate(()=>({id:window.realm.state.playerId,room:window.realm.state.room}))).toEqual(session);

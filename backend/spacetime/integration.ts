@@ -21,7 +21,7 @@ function state(conn: DbConnection) { const row = conn.db.matchState.room.find(ro
 const draft = { room, name: 'Host', hero: 'knight', companion: 'harvester', size: 1 };
 try {
   const host = await connect();
-  for (const size of [0, 4, 255]) await assert.rejects(host.conn.reducers.joinMatch({ ...draft, size }), /team size/i);
+  for (const size of [0, 2, 3]) await assert.rejects(host.conn.reducers.joinMatch({ ...draft, size }), /1v1/i);
   await host.conn.reducers.joinMatch(draft);
   await waitFor(() => state(host.conn)?.size === 1, '1v1 room');
   assert.equal(state(host.conn).actors.filter((a: {kind:string}) => a.kind === 'hero').length, 2);

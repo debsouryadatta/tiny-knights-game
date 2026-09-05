@@ -1,4 +1,4 @@
-import { isWalkable, WIDTH, HEIGHT, TILE } from '../shared/map';
+import { isWalkable } from '../shared/map';
 import { validateBuildPlacement } from '../shared/simulation';
 import { createMainActionHold, getMainAction } from './contextual-action.js';
 export function createInput(canvas, renderer, options) {
@@ -113,8 +113,8 @@ export function createInput(canvas, renderer, options) {
     if (press.dragged && !press.tactical) {
       const view = options.getView();
       view.inspect = {
-        x: Math.max(0, Math.min(WIDTH*TILE, press.camera.x - dx / press.scale)),
-        y: Math.max(0, Math.min(HEIGHT*TILE, press.camera.y - dy / press.scale)),
+        x: Math.max(0, Math.min(4096, press.camera.x - dx / press.scale)),
+        y: Math.max(0, Math.min(4096, press.camera.y - dy / press.scale)),
       };
     }
   });
@@ -143,7 +143,7 @@ export function createInput(canvas, renderer, options) {
     if (prior.tactical) {
       const point = renderer.screenToWorld(e.clientX, e.clientY),
         view = options.getView();
-      view.inspect = { x: (point.x + 0.5) * TILE, y: (point.y + 0.5) * TILE };
+      view.inspect = { x: (point.x + 0.5) * 64, y: (point.y + 0.5) * 64 };
       view.tactical = false;
       return;
     }

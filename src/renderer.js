@@ -1,11 +1,12 @@
-import { WORLD, files, bakeTerrain, drawObject, getVisibleObjects, drawRiver, drawLaneLabels } from './world.js';
+import { WORLD, files, bakeTerrain, drawObject, getVisibleObjects, drawRiver } from './world.js';
 import { getMoveSpeed, moveContinuous } from '../shared/movement';
 import { loadAssets } from './asset-loader.js';
 import { createCombatEffects } from './combat-effects.js';
-import { spawnFor, WIDTH, HEIGHT, TILE } from '../shared/map';
+import { spawnFor } from '../shared/map';
 import { validateBuildPlacement } from '../shared/simulation';
 import { advanceRunPhase } from './sprite-motion.js';
 
+const TILE = 64;
 const colors = { blue: '#79c9ff', red: '#ef7972' };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -32,12 +33,12 @@ export function createRenderer(canvas, options) {
   const rebuildMinimap=()=>{
     if(!terrain||!minimapBase)return;
     const m=minimapBase.getContext('2d');if(!m)return;
-    m.clearRect(0,0,minimapBase.width,minimapBase.height);m.drawImage(terrain.overview,0,0,minimapBase.width,minimapBase.height);
+    m.clearRect(0,0,512,512);m.drawImage(terrain.overview,0,0,512,512);
     const generation=++minimapGeneration;
     const objects=getVisibleObjects({left:0,top:0,right:WORLD.W,bottom:WORLD.H});let cursor=0;
     const slice=()=>{
       if(stopped||generation!==minimapGeneration)return;
-      const start=performance.now();m.save();m.scale(minimapBase.width/WORLD.W,minimapBase.height/WORLD.H);
+      const start=performance.now();m.save();m.scale(512/WORLD.W,512/WORLD.H);
       while(cursor<objects.length&&performance.now()-start<3)drawObject(m,images,objects[cursor++],0);
       m.restore();if(cursor<objects.length)setTimeout(slice,16);
     };
@@ -66,7 +67,7 @@ export function createRenderer(canvas, options) {
     if (stopped) return;
     terrain = bakeTerrain(images);
     minimapBase = document.createElement('canvas');
-    minimapBase.width = terrain.overview.width; minimapBase.height = terrain.overview.height;
+    minimapBase.width = 512; minimapBase.height = 512;
     minimapBase.addEventListener('contextrestored',rebuildMinimap);
     terrain.overview.addEventListener('contextrestored',rebuildMinimap);
     rebuildMinimap();
@@ -92,7 +93,7 @@ export function createRenderer(canvas, options) {
   }
   function screenToWorld(x,y) {
     const rect=canvas.getBoundingClientRect();
-    return {x:clamp((x-rect.left-width/2)/scale/TILE+camera.x/TILE-.5,0,WIDTH-1),y:clamp((y-rect.top-height/2)/scale/TILE+camera.y/TILE-.5,0,HEIGHT-1)};
+    return {x:clamp((x-rect.left-width/2)/scale/TILE+camera.x/TILE-.5,0,63),y:clamp((y-rect.top-height/2)/scale/TILE+camera.y/TILE-.5,0,63)};
   }
   function predictCommand(command) {
     const actor=options.getState()?.actors.find(a=>a.id===options.getPlayerId());
@@ -203,11 +204,10 @@ export function createRenderer(canvas, options) {
     if (!target || !minimapBase) return;
     const m = target.getContext('2d'), w = target.width, h = target.height, state = options.getState();
     m.clearRect(0, 0, w, h); m.drawImage(minimapBase, 0, 0, w, h);
-    drawLaneLabels(m,w,h,clamp(w/24,7,11));
     if (!state) return;
-    for (const s of state.structures) if (s.hp > 0) { m.fillStyle = colors[s.team]; m.fillRect((s.x + .5) / WIDTH * w - 2, (s.y + .5) / HEIGHT * h - 2, s.kind === 'core' ? 6 : 3, s.kind === 'core' ? 6 : 3); }
+    for (const s of state.structures) if (s.hp > 0) { m.fillStyle = colors[s.team]; m.fillRect((s.x + .5) / 64 * w - 2, (s.y + .5) / 64 * h - 2, s.kind === 'core' ? 6 : 3, s.kind === 'core' ? 6 : 3); }
     for (const a of state.actors) if (a.hp > 0) {
-      const x = (a.x + .5) / WIDTH * w, y = (a.y + .5) / HEIGHT * h;
+      const x = (a.x + .5) / 64 * w, y = (a.y + .5) / 64 * h;
       m.fillStyle = a.id === options.getPlayerId() ? '#fff4ba' : colors[a.team];
       if (a.kind === 'creep') { m.fillRect(x - .75, y - .75, 1.5, 1.5); continue; }
       m.beginPath(); m.arc(x, y, a.id === options.getPlayerId() ? 3.5 : a.kind === 'hero' ? 2.8 : 1.5, 0, Math.PI * 2); m.fill();
@@ -347,7 +347,7 @@ export function createRenderer(canvas, options) {
     viewport.left=camera.x-hw;viewport.top=camera.y-hh;viewport.right=camera.x+hw;viewport.bottom=camera.y+hh;
     const terrainReady = terrain.draw(ctx,viewport,view.tactical);
     if(!view.tactical)drawRiver(ctx,images,viewport,reducedMotion?0:time);
-    if(view.tactical&&minimapBase){ctx.drawImage(minimapBase,0,0,WORLD.W,WORLD.H);drawLaneLabels(ctx,WORLD.W,WORLD.H,12/scale);}
+    if(view.tactical&&minimapBase)ctx.drawImage(minimapBase,0,0,WORLD.W,WORLD.H);
     if(me&&!view.tactical){
       const actor=state?.actors.find(a=>a.id===options.getPlayerId());
       if(actor?.attackHeld || view.aim){
