@@ -12,7 +12,7 @@ import './combat-polish.css';
 import { createRenderer } from './renderer.js';
 import { createInput } from './input.js';
 import { createUI } from './ui.js';
-import { WIDTH, HEIGHT, TILE, isWalkable } from '../shared/map.ts';
+import { WIDTH, HEIGHT, TILE, isWalkable, baseFor } from '../shared/map.ts';
 
 const canvas = document.querySelector('#game');
 const client = new GameClient();
@@ -97,6 +97,8 @@ const input = createInput(canvas, renderer, options);
 const mapTimer = setInterval(() => {
   const minimap = document.querySelector('#minimap');
   if (minimap) renderer.drawMap(minimap);
+  const lobbyMap=document.querySelector('#lobby-map');
+  if(lobbyMap&&!document.querySelector('#waiting-lobby')?.hidden)renderer.drawMap(lobbyMap);
 }, 200);
 refresh();
 renderer.ready
@@ -155,8 +157,8 @@ window.realm = {
     return {
       ready: renderer.getStats().ready,
       connected: client.status === 'connected',
-      x: (me?.x ?? 8) * TILE,
-      y: (me?.y ?? 56) * TILE,
+      x: (me?.x ?? baseFor('blue').x) * TILE,
+      y: (me?.y ?? baseFor('blue').y) * TILE,
       room: client.session?.room,
       playerId: me?.id,
       hp: me?.hp,

@@ -28,7 +28,7 @@ export class SpacetimeGameClient {
   join(draft: Draft) {
     this.disconnect();
     let resumeRoom:string|undefined;
-    try { if(draft.mode==='quick')resumeRoom=sessionStorage.getItem(sessionKey('quick-room'))||undefined; } catch {}
+    try { if(draft.mode==='quick')resumeRoom=sessionStorage.getItem(sessionKey(`quick-room-${draft.size}`))||undefined; } catch {}
     this.draft = { ...draft, room: (draft.room || resumeRoom || Array.from(crypto.getRandomValues(new Uint8Array(3)),b=>b.toString(16).padStart(2,'0')).join('')).trim().toUpperCase() };
     try { this.token = sessionStorage.getItem(sessionKey(this.draft.room)) ?? undefined; } catch { this.token = undefined; }
     this.state = null; this.session = null; this.lobby=null;this.roster=[];this.quickQueue=null;this.quickOffers=[]; this.error = null; this.stopped = false;
@@ -53,7 +53,7 @@ export class SpacetimeGameClient {
           if(this.stopped||this.connection!==conn)return;
           const member = [...conn.db.mySession.iter()][0];
           if (member) { this.session = { playerId: member.playerId, room: member.room, token }; this.status = 'connected';draft.room=member.room;subscribeRoom(member.room);
-            try{sessionStorage.setItem(sessionKey(member.room),token);if(draft.mode==='quick')sessionStorage.setItem(sessionKey('quick-room'),member.room);}catch{}
+            try{sessionStorage.setItem(sessionKey(member.room),token);if(draft.mode==='quick')sessionStorage.setItem(sessionKey(`quick-room-${draft.size}`),member.room);}catch{}
           }
           this.lobby=conn.db.roomLobby.room.find(draft.room!)??null;
           this.roster=[...conn.db.lobbyRoster.iter()];
@@ -63,7 +63,7 @@ export class SpacetimeGameClient {
           if (row) this.state = JSON.parse(row.snapshot) as GameState;
           this.emit();
         };
-        conn.db.mySession.onInsert(read); conn.db.mySession.onUpdate(read);
+        conn.db.mySession.onInsert(read); conn.db.mySession.onUpdate(read); conn.db.mySession.onDelete(read);
         conn.db.matchState.onInsert(read); conn.db.matchState.onUpdate(read);
         conn.db.roomLobby.onInsert(read);conn.db.roomLobby.onUpdate(read);conn.db.roomLobby.onDelete(read);
         conn.db.lobbyRoster.onInsert(read);conn.db.lobbyRoster.onDelete(read);
@@ -116,7 +116,7 @@ export class SpacetimeGameClient {
   waitForHuman(){return this.quickAction(()=>this.connection?.reducers.quickPreference({humanOnly:true}));}
   playBot(){return this.quickAction(()=>this.connection?.reducers.playQuickBot({}));}
   joinRunning(room:string){return this.quickAction(()=>this.connection?.reducers.joinRunningMatch({room}));}
-  async leave(){if(this.lobby&&!this.lobby.started)await this.connection?.reducers.leaveLobby({});try{if(this.draft?.mode==='quick')sessionStorage.removeItem(sessionKey('quick-room'));}catch{}this.disconnect();}
+  async leave(){if(this.lobby&&!this.lobby.started)await this.connection?.reducers.leaveLobby({});try{if(this.draft?.mode==='quick')sessionStorage.removeItem(sessionKey(`quick-room-${this.draft.size}`));}catch{}this.disconnect();}
   disconnect() {
     this.stopped = true;
     this.stopPing?.();this.stopPing=null;this.ping={state:'measuring',ms:null};this.pingSamples=0;

@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['entry-options.spec.js', 'landing-music.spec.js', 'match-intro.spec.js', 'landing.spec.js', 'quick-ui.spec.js', 'issue-progression.spec.js', 'contextual-e2e.spec.js', 'mobile-webkit.spec.js', 'mobile-layout.spec.js', 'mobile-input.spec.js', 'mobile-performance.spec.js', 'pack-visuals.spec.js', 'lobby.spec.js', 'audio.spec.js', 'ping.spec.js', 'combat-polish.spec.js', 'duel.spec.js', 'new-realm.spec.js', 'moba-controls.spec.js', 'mobile-rendering.spec.js', 'responsive-controls.spec.js', 'motion-regression.spec.js', 'gameplay-ux.spec.js', 'startup-loading.spec.js'],
+  testMatch: ['three-lanes.spec.js', 'team-multiplayer.spec.js', 'entry-options.spec.js', 'landing-music.spec.js', 'match-intro.spec.js', 'landing.spec.js', 'quick-ui.spec.js', 'issue-progression.spec.js', 'contextual-e2e.spec.js', 'mobile-webkit.spec.js', 'mobile-layout.spec.js', 'mobile-input.spec.js', 'mobile-performance.spec.js', 'pack-visuals.spec.js', 'lobby.spec.js', 'audio.spec.js', 'ping.spec.js', 'combat-polish.spec.js', 'duel.spec.js', 'new-realm.spec.js', 'moba-controls.spec.js', 'mobile-rendering.spec.js', 'responsive-controls.spec.js', 'motion-regression.spec.js', 'gameplay-ux.spec.js', 'startup-loading.spec.js'],
   timeout: 60000,
   expect: { timeout: 12000 },
   fullyParallel: false,

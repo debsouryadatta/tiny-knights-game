@@ -7,7 +7,7 @@ import {
   stepGame,
   TOWER_COST,
 } from "./simulation";
-import { isWalkable, isLane, laneAt, riverX } from "./map";
+import { isWalkable, isLane, laneAt, riverX, bridgeCenters } from "./map";
 import {canOccupy,moveContinuous} from './movement';
 import {ABILITY_COOLDOWNS,attackDamage,DASH_DAMAGE} from './balance';
 import type { GameState } from "./types";
@@ -63,24 +63,23 @@ test("claim every slot, preserve companions and reject full match", () => {
   assert.ok(ids.every((id) => s.actors.some((a) => a.ownerId === id)));
 });
 test('unsupported team sizes fail before creating or claiming a match', () => {
-  for (const size of [0, 2, 3, -1, NaN]) {
-    assert.throws(() => createGame('invalid', size), /1v1/);
+  for (const size of [0, 4, 1.5, -1, NaN]) {
+    assert.throws(() => createGame('invalid', size), /Team size/);
     const s = createGame('valid');
     const before = JSON.stringify(s);
-    assert.throws(() => addPlayer(s, { ...draft, size } as unknown as typeof draft), /1v1/);
+    assert.throws(() => addPlayer(s, { ...draft, size } as unknown as typeof draft), /Team size/);
     assert.equal(JSON.stringify(s), before);
   }
 });
-test('only the central lane is a road and a walkable river crossing', () => {
-  assert.equal(laneAt(31, 32), 1);
-  assert.ok(isWalkable(31, 32));
-  for (const y of [7, 56]) {
+test('all three lanes are roads with walkable river crossings', () => {
+  for (const center of bridgeCenters) {
+    const y = Math.round(center.y);
     const x = Math.round(riverX(y));
-    assert.equal(isLane(x, y), false);
-    assert.equal(isWalkable(x, y), false);
+    assert.equal(isLane(x, y), true);
+    assert.equal(isWalkable(x, y), true);
   }
-  assert.equal(isLane(6, 20), false);
-  assert.ok(isWalkable(6, 20), 'Old clearings remain available for roaming');
+  assert.equal(laneAt(8, 20), 0);
+  assert.ok(isWalkable(8, 20), 'Old clearings remain available for roaming');
 });
 test('a friend replaces the opponent bot with one fresh matching companion', () => {
   const s = createGame('friends');
@@ -112,15 +111,15 @@ test('a friend replaces the opponent bot with one fresh matching companion', () 
   assert.equal(s.actors.length, 4);
   assert.throws(() => addPlayer(s, draft), /full/);
 });
-test('waves use three formation slots on the central lane and persist through snapshots', () => {
+test('waves use three formation slots on each lane and persist through snapshots', () => {
   let s = createGame('waves');
-  s.elapsed = 44.9;
+  s.elapsed = 11.9;
   stepGame(s, .2);
   for (const team of ['blue', 'red']) {
     const wave = s.actors.filter(a => a.kind === 'creep' && a.team === team);
-    assert.equal(wave.length, 3);
-    assert.deepEqual(wave.map(a => a.formationSlot), [0, 1, 2]);
-    assert.ok(wave.every(a => a.lane === 1 && canOccupy(s, a, a.id)));
+    assert.equal(wave.length, 9);
+    for (const lane of [0, 1, 2]) assert.deepEqual(wave.filter(a => a.lane === lane).map(a => a.formationSlot), [0, 1, 2]);
+    assert.ok(wave.every(a => canOccupy(s, a, a.id)));
     assert.ok(new Set(wave.map(a => JSON.stringify(a.target))).size > 1);
   }
   const slots = s.actors.filter(a => a.kind === 'creep').map(a => a.formationSlot);
@@ -295,7 +294,7 @@ test('steer normalizes diagonals, acknowledges sequence, stops and times out',()
  assert.equal(applyCommand(s,id,{type:'steer',x:NaN,y:0,seq:4}).ok,false);
 });
 test('continuous sweep cannot tunnel across blocked terrain',()=>{
- const s=createGame('collision', 1),id=addPlayer(s,draft);s.actors=s.actors.filter(a=>a.id===id);const a=s.actors[0];a.x=6;a.y=10;
+ const s=createGame('collision', 1),id=addPlayer(s,draft);s.actors=s.actors.filter(a=>a.id===id);const a=s.actors[0];a.x=8;a.y=20;
  moveContinuous(s,a,-10,0);assert.ok(a.x>=1.78-1e-6);assert.ok(canOccupy(s,a,id));
 });
 test('three skill cooldowns are independent; recall cancels on steering and completes when safe',()=>{

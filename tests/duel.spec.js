@@ -5,8 +5,8 @@ async function openLobby(page) {
   await page.goto('/');
   await page.waitForFunction(() => window.realm?.state.ready);
   await expect(page.locator('#join-screen')).toBeVisible();
-  await expect(page.locator('select[name="size"]')).toHaveCount(0);
-  await expect(page.getByRole('combobox', { name: /match size/i })).toHaveCount(0);
+  await expect(page.locator('[data-choice="size"] button')).toHaveCount(3);
+  await expect(page.locator('[data-choice="size"] [data-value="1"]')).toHaveAttribute('aria-pressed','true');
 }
 
 async function submitDraft(page, room, name, create = false) {
@@ -89,7 +89,7 @@ test('same room admits two opposing players with one companion each and rejects 
     for (const page of [first, second]) {
       await expect.poll(() => page.evaluate(() => {
         const minions = window.realm?.match?.actors.filter(a => a.kind === 'creep') ?? [];
-        return minions.length > 0 && minions.every(a => a.lane === 1);
+        return ['blue','red'].every(team=>[0,1,2].every(lane=>minions.some(a=>a.team===team&&a.lane===lane)));
       })).toBe(true);
     }
   } finally {

@@ -1,6 +1,35 @@
-# Little Realm · 1v1 Duel
+# Little Realm · Team multiplayer
 
-The main route is a strict 1v1 multiplayer duel built on the Canvas 2D engine and Tiny Swords sprites. Each side has one hero and one personal companion. Quick Play joins an available public match or starts one against a bot. Create Room opens a private waiting lobby with an invite code; your friend enters the code and readies up, then the host starts. The host can also start alone against a bot. A third player cannot join. Three-minion waves push the central lane toward the enemy core. Guardian and Scout escort by default, while Harvester gathers resources. Older 2v2/3v3 rooms cannot be joined; create a new duel.
+Choose 1v1, 2v2 or 3v3. Every player controls a hero and one personal companion across an 80×56-tile rectangular battlefield with three playable lanes: Top, Mid and Bottom. Teams share resources and win by destroying the enemy core or reaching 21 team hero kills.
+
+The wider layout has mirrored bases, outer routes around jungle camps and a direct diagonal Mid lane. Each lane has its own river crossing and minion waves, starting at 12 seconds and repeating every 30 seconds. Starting assignments are Mid for 1v1, Top/Bottom for 2v2 and all three lanes for 3v3. Players can rotate freely through the jungle. The lobby previews the battlefield and assignments; press M or tap the minimap for the labeled overview.
+
+Create Room opens a private lobby with an invite code. Players join balanced Blue/Red slots and ready up; the host starts when every guest is online and ready. Empty seats use bots. Joining by code uses the room's size, regardless of the selection on the landing page. Disconnects reserve the player's seat and let a bot take over; reconnect and rematch preserve the same hero slot and team.
+
+Quick Play has separate queues for each size. Full online rosters start automatically. After 60 seconds, remaining seats use bots, unless the queue host chooses to keep waiting. For team queues, only the host controls bot preferences. Players can explicitly accept a same-size running-match offer without deleting the waiting room of teammates left behind.
+
+## Test this worktree locally
+
+The team implementation is not published to the production database. Use an isolated local server and frontend together:
+
+```sh
+npm ci
+cp .env.example .env.local
+npm ci --prefix backend/spacetime/module/spacetimedb
+spacetime start --listen-addr 127.0.0.1:3024 --data-dir backend/spacetime/.data/team-multiplayer --non-interactive
+# In another terminal:
+spacetime publish --server http://127.0.0.1:3024 --module-path backend/spacetime/module/spacetimedb --delete-data=never --yes tiny-knights-rect-dev
+VITE_SPACETIMEDB_URI=http://127.0.0.1:3024 VITE_SPACETIMEDB_DB_NAME=tiny-knights-rect-dev VITE_COMPANION_PLANNER=false npm run dev -- --port 4184
+```
+
+Open `http://localhost:4184`. Keep this frontend connected to the team-enabled module. The default live endpoint described below still serves the previous duel release until deployment. Team implementation decisions and verification are recorded in [design/team-multiplayer.md](design/team-multiplayer.md).
+
+```sh
+npx tsx --test shared/*.test.ts src/*.test.* src/audio/*.test.js
+SPACETIME_TEST_URI=http://127.0.0.1:3024 SPACETIME_TEST_DATABASE=tiny-knights-rect-dev npx tsx backend/spacetime/team-integration.ts
+PLAYWRIGHT_BASE_URL=http://localhost:4184 npx playwright test tests/three-lanes.spec.js tests/team-multiplayer.spec.js tests/lobby.spec.js tests/duel.spec.js
+```
+
 
 Heroes earn kill XP up to level 10, gaining health and basic-attack damage. Allied core and spawn fountains restore health without using Regen. Towers take 2.5 seconds to build, reserving their cost; movement or another action cancels construction and refunds it. The main attack button and Space become Gather near a resource unless an enemy is in attack range. C remains a dedicated Gather command.
 
@@ -14,7 +43,9 @@ Sound is enabled by default and unlocks on the first click, tap, or keypress, as
 
 The top-right Ping indicator measures an application round trip over the live SpacetimeDB socket, including server response time. It uses a temporary read-only session subscription about every three seconds, even while idle. Green means under 100 ms, amber 100–199 ms, and red 200 ms or more. A three-second timeout shows `Ping >3s`; reconnecting hides the old measurement. This is not FPS, Vercel load time, or an ICMP network-only measurement.
 
-### SpacetimeDB development
+### Production SpacetimeDB configuration
+
+This section describes the deployed database. Use the isolated worktree instructions above to test the team release.
 
 Install SpacetimeDB CLI 2.10.0 and configure the self-hosted server once:
 
@@ -43,7 +74,7 @@ Startup is staged: a native progress panel appears before JavaScript, then 16 es
 
 The play camera is 22% closer. All heroes now have Dash (180 damage, 8-second cooldown), Sprint (1.5x speed for 3 seconds, 12-second cooldown), and Shockwave (150 damage with knockback, 16-second cooldown). Hero basic DPS is 60; soldier DPS is 5. See `design/combat-balance.md` for formulas and limitations.
 
-Checks: `npm run build`, `npx tsx --test shared/*.test.ts`, and `npx playwright test` with frontend/backend running. Browser tests use local Chrome on desktop and two touch viewports. Current verification: 31 shared tests, real-backend integration, 28 gameplay/browser checks and 12 staged-loading checks passed; 23 viewport-inapplicable checks skipped. Slow/failed image requests are simulated, not physical-phone benchmarks. See `design/verification.md` for earlier evidence and limitations.
+Checks: `npm run build`, `npx tsx --test shared/*.test.ts`, and `npx playwright test` with frontend/backend running. Browser tests use local Chrome on desktop and two touch viewports. Historical duel verification: 31 shared tests, real-backend integration, 28 gameplay/browser checks and 12 staged-loading checks passed; 23 viewport-inapplicable checks skipped. Slow/failed image requests are simulated, not physical-phone benchmarks. See `design/verification.md` for earlier evidence and limitations.
 
 ## Original explorer (preserved at /explore.html)
 
