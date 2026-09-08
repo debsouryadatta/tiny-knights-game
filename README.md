@@ -1,4 +1,4 @@
-# Little Realm · Team multiplayer
+# Tiny Knights · Team multiplayer
 
 Choose 1v1, 2v2 or 3v3. Every player controls a hero and one personal companion across an 80×56-tile rectangular battlefield with three playable lanes: Top, Mid and Bottom. Teams share resources and win by destroying the enemy core or reaching 21 team hero kills.
 
