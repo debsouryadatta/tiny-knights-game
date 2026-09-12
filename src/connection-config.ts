@@ -1,5 +1,5 @@
 // Public build-time connection settings. Never put provider or publisher keys here.
-export const databaseName = import.meta.env.VITE_SPACETIMEDB_DB_NAME || 'little-realm-teams-v2';
+export const databaseName = import.meta.env.VITE_SPACETIMEDB_DB_NAME || 'tiny-knights-teams-v3';
 export const databaseUri = import.meta.env.VITE_SPACETIMEDB_URI || 'https://spacetime.tinkerers.space';
 
 // Keep identities separate when a developer explicitly points the client at its own origin.
