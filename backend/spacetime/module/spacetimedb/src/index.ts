@@ -31,11 +31,11 @@ export const checkClientVersion = db.reducer({ version:t.u32() }, (_ctx,{version
 
 // User-requested baseline, applied once in the same transaction as its marker.
 function seedGameCount(ctx: ReducerCtx<typeof db.schemaType>) {
-  if(ctx.db.stats_migration.id.find('baseline-100-v1'))return;
+  if(ctx.db.stats_migration.id.find('baseline-200-v1'))return;
   const current=ctx.db.platform_stats.id.find(0);
-  if(current)ctx.db.platform_stats.id.update({...current,gamesPlayed:current.gamesPlayed+100n});
-  else ctx.db.platform_stats.insert({id:0,gamesPlayed:100n});
-  ctx.db.stats_migration.insert({id:'baseline-100-v1'});
+  if(!current)ctx.db.platform_stats.insert({id:0,gamesPlayed:200n});
+  else if(current.gamesPlayed<200n)ctx.db.platform_stats.id.update({...current,gamesPlayed:200n});
+  ctx.db.stats_migration.insert({id:'baseline-200-v1'});
 }
 function recordGameStart(ctx: ReducerCtx<typeof db.schemaType>) {
   seedGameCount(ctx);

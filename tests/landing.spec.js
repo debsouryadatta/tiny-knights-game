@@ -132,7 +132,7 @@ test('empty names are rejected; landing counter updates only after starting a ga
   await expect(page.locator('#games-played')).toHaveText(/^[\d,]+ games played$/);
   const count=()=>page.locator('#games-played').innerText().then(s=>BigInt(s.replace(/[^\d]/g,'')));
   const initial=await count();
-  expect(initial).toBeGreaterThanOrEqual(100n);
+  expect(initial).toBeGreaterThanOrEqual(200n);
   await page.locator('#quick-play').click();
   await expect(page.locator('#join-error')).toContainText('Enter your name');
   await expect(page.locator('#waiting-lobby')).toBeHidden();
