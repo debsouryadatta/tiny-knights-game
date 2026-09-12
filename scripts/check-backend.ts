@@ -7,7 +7,7 @@ const required = process.env.VERCEL === '1' || process.argv.includes('--required
 if (required) {
   const env={...loadEnv('production',process.cwd(),'VITE_'),...process.env};
   const uri = env.VITE_SPACETIMEDB_URI || 'https://spacetime.tinkerers.space';
-  const database = env.VITE_SPACETIMEDB_DB_NAME || 'little-realm-teams-v2';
+  const database = env.VITE_SPACETIMEDB_DB_NAME || 'tiny-knights-teams-v3';
   let conn: DbConnection | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
