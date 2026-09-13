@@ -16,8 +16,13 @@ const room_lobby = table({ public: true }, { room: t.string().primaryKey(), publ
 const quick_queue = table({}, { room: t.string().primaryKey(), deadlineMicros: t.u64(), humanOnly: t.bool() });
 const platform_stats = table({ public: true }, { id: t.u8().primaryKey(), gamesPlayed: t.u64() });
 const stats_migration = table({}, { id: t.string().primaryKey() });
-const db = schema({ match_state, membership, tick_timer, room_owner, connection, control_clock, room_lobby, quick_queue, platform_stats, stats_migration });
+const room_idle = table({}, { room: t.string().primaryKey(), sinceMicros: t.u64() });
+const db = schema({ match_state, membership, tick_timer, room_owner, connection, control_clock, room_lobby, quick_queue, platform_stats, stats_migration, room_idle });
 export default db;
+
+const ROOM_LIMIT = 100;
+const WAITING_OR_FINISHED_IDLE_MICROS = 120_000_000n;
+const PLAYING_IDLE_MICROS = 600_000_000n;
 
 // A read-only handshake prevents client prediction against incompatible map rules.
 export const checkClientVersion = db.reducer({ version:t.u32() }, (_ctx,{version}) => {
@@ -26,17 +31,68 @@ export const checkClientVersion = db.reducer({ version:t.u32() }, (_ctx,{version
 
 // User-requested baseline, applied once in the same transaction as its marker.
 function seedGameCount(ctx: ReducerCtx<typeof db.schemaType>) {
-  if(ctx.db.stats_migration.id.find('baseline-100-v1'))return;
+  if(ctx.db.stats_migration.id.find('baseline-200-v1'))return;
   const current=ctx.db.platform_stats.id.find(0);
-  if(current)ctx.db.platform_stats.id.update({...current,gamesPlayed:current.gamesPlayed+100n});
-  else ctx.db.platform_stats.insert({id:0,gamesPlayed:100n});
-  ctx.db.stats_migration.insert({id:'baseline-100-v1'});
+  if(!current)ctx.db.platform_stats.insert({id:0,gamesPlayed:200n});
+  else if(current.gamesPlayed<200n)ctx.db.platform_stats.id.update({...current,gamesPlayed:200n});
+  ctx.db.stats_migration.insert({id:'baseline-200-v1'});
 }
 function recordGameStart(ctx: ReducerCtx<typeof db.schemaType>) {
   seedGameCount(ctx);
   const current = ctx.db.platform_stats.id.find(0);
   if (current) ctx.db.platform_stats.id.update({ ...current, gamesPlayed: current.gamesPlayed + 1n });
   else ctx.db.platform_stats.insert({ id: 0, gamesPlayed: 1n });
+}
+function connectedRooms(ctx: ReducerCtx<typeof db.schemaType>) {
+  const online = new Set([...ctx.db.connection.iter()].map(c => c.identity.toHexString()));
+  return new Set([...ctx.db.membership.iter()].filter(m => online.has(m.identity.toHexString())).map(m => m.room));
+}
+function roomHasConnection(ctx: ReducerCtx<typeof db.schemaType>, room: string) {
+  return [...ctx.db.membership.iter()].some(m => m.room === room && [...ctx.db.connection.iter()].some(c => c.identity.equals(m.identity)));
+}
+function clearRoomIdle(ctx: ReducerCtx<typeof db.schemaType>, room: string) {
+  if (ctx.db.room_idle.room.find(room)) ctx.db.room_idle.room.delete(room);
+}
+function markRoomIdle(ctx: ReducerCtx<typeof db.schemaType>, room: string) {
+  if (ctx.db.room_idle.room.find(room)) return;
+  ctx.db.room_idle.insert({ room, sinceMicros: ctx.timestamp.microsSinceUnixEpoch });
+}
+function purgeRoom(ctx: ReducerCtx<typeof db.schemaType>, room: string) {
+  for (const member of [...ctx.db.membership.iter()]) if (member.room === room) {
+    const prefix = member.identity.toHexString() + ':';
+    for (const clock of [...ctx.db.control_clock.iter()]) if (clock.key.startsWith(prefix)) ctx.db.control_clock.key.delete(clock.key);
+    ctx.db.membership.identity.delete(member.identity);
+  }
+  ctx.db.quick_queue.room.delete(room);
+  ctx.db.room_lobby.room.delete(room);
+  ctx.db.room_owner.room.delete(room);
+  ctx.db.room_idle.room.delete(room);
+  ctx.db.match_state.room.delete(room);
+}
+function idleLimitMicros(ctx: ReducerCtx<typeof db.schemaType>, row: { room: string; snapshot: string }) {
+  if (ctx.db.room_lobby.room.find(row.room)?.started === false) return WAITING_OR_FINISHED_IDLE_MICROS;
+  try {
+    if ((JSON.parse(row.snapshot) as GameState).phase === 'finished') return WAITING_OR_FINISHED_IDLE_MICROS;
+  } catch { return WAITING_OR_FINISHED_IDLE_MICROS; }
+  return PLAYING_IDLE_MICROS;
+}
+function isIdleExpired(ctx: ReducerCtx<typeof db.schemaType>, row: { room: string; snapshot: string }, now: bigint) {
+  const idle = ctx.db.room_idle.room.find(row.room);
+  return !!idle && now - idle.sinceMicros >= idleLimitMicros(ctx, row);
+}
+function reclaimIdleRooms(ctx: ReducerCtx<typeof db.schemaType>) {
+  const now = ctx.timestamp.microsSinceUnixEpoch;
+  const active = connectedRooms(ctx);
+  for (const row of [...ctx.db.match_state.iter()]) {
+    if (active.has(row.room) || !isIdleExpired(ctx, row, now)) continue;
+    purgeRoom(ctx, row.room);
+  }
+  if ([...ctx.db.match_state.iter()].length < ROOM_LIMIT) return;
+  for (const row of [...ctx.db.match_state.iter()]) {
+    if ([...ctx.db.match_state.iter()].length < ROOM_LIMIT) return;
+    if (active.has(row.room)) continue;
+    purgeRoom(ctx, row.room);
+  }
 }
 
 export const mySession = db.view({ public: true }, t.option(membership.rowType), ctx => ctx.db.membership.identity.find(ctx.sender) ?? undefined);
@@ -94,13 +150,17 @@ function joinRoom(ctx: ReducerCtx<typeof db.schemaType>, args: {room:string;name
       if (actor) actor.bot = false;
       ctx.db.match_state.room.update({ ...existing, snapshot: JSON.stringify(state), revision: existing.revision + 1 });
     }
+    clearRoomIdle(ctx, args.room);
     return;
   }
   if (prior) throw new SenderError('Reconnect to your existing room with this identity.');
   args.name = args.name.trim();
   if (!args.name || args.name.length > 24) throw new SenderError('Enter a name between 1 and 24 characters.');
   const row = ctx.db.match_state.room.find(args.room);
-  if (!row && [...ctx.db.match_state.iter()].length >= 100) throw new SenderError('Prototype room limit reached. Reuse an existing room.');
+  if (!row && [...ctx.db.match_state.iter()].length >= ROOM_LIMIT) {
+    reclaimIdleRooms(ctx);
+    if ([...ctx.db.match_state.iter()].length >= ROOM_LIMIT) throw new SenderError('Prototype room limit reached. Reuse an existing room.');
+  }
   const state: GameState = row ? JSON.parse(row.snapshot) : createGame(args.room, args.size);
   normalizePlayerLanes(state);
   if (state.size !== args.size) throw new SenderError('Room team size differs.');
@@ -119,6 +179,7 @@ function joinRoom(ctx: ReducerCtx<typeof db.schemaType>, args: {room:string;name
   if (row) ctx.db.match_state.room.update(next); else ctx.db.match_state.insert(next);
   if (!ctx.db.room_owner.room.find(args.room)) ctx.db.room_owner.insert({ room: args.room, identity: ctx.sender });
   ctx.db.membership.insert({ identity: ctx.sender, room: args.room, playerId, lastCommandMicros: 0n });
+  clearRoomIdle(ctx, args.room);
 }
 export const joinMatch = db.reducer(draftParams, (ctx,args) => {
   const room=args.room.trim().toUpperCase();
@@ -265,13 +326,15 @@ function leaveWaitingRoom(ctx: ReducerCtx<typeof db.schemaType>) {
   const row=ctx.db.match_state.room.find(member.room);
   if(row){const state:GameState=JSON.parse(row.snapshot);const actor=state.actors.find(a=>a.id===member.playerId);if(actor)actor.bot=true;ctx.db.match_state.room.update({...row,snapshot:JSON.stringify(state),revision:row.revision+1});}
   const remaining=[...ctx.db.membership.iter()].filter(m=>m.room===member.room);
-  if(!remaining.length){ctx.db.quick_queue.room.delete(member.room);ctx.db.room_lobby.room.delete(member.room);ctx.db.match_state.room.delete(member.room);ctx.db.room_owner.room.delete(member.room);return;}
+  if(!remaining.length){purgeRoom(ctx, member.room);return;}
   if(lobby.hostPlayerId===member.playerId){ctx.db.room_lobby.room.update({...lobby,hostPlayerId:remaining[0].playerId,readyPlayers:'[]'});ctx.db.room_owner.room.update({room:member.room,identity:remaining[0].identity});}
   else ctx.db.room_lobby.room.update({...lobby,readyPlayers:JSON.stringify((JSON.parse(lobby.readyPlayers) as string[]).filter(id=>id!==member.playerId))});
 }
 export const leaveLobby = db.reducer(ctx => leaveWaitingRoom(ctx));
 export const onConnect = db.clientConnected(ctx => {
   if (ctx.connectionId) ctx.db.connection.insert({ id: ctx.connectionId, identity: ctx.sender });
+  const member = ctx.db.membership.identity.find(ctx.sender);
+  if (member) clearRoomIdle(ctx, member.room);
 });
 export const onDisconnect = db.clientDisconnected(ctx => {
   if (ctx.connectionId) ctx.db.connection.id.delete(ctx.connectionId);
@@ -285,6 +348,7 @@ export const onDisconnect = db.clientDisconnected(ctx => {
   const actor = state.actors.find(a => a.id === member.playerId);
   if (actor) {actor.bot = true;actor.attackHeld=false;actor.attackUntil=undefined;actor.attackTargetId=undefined;actor.steer=undefined;actor.target=undefined;}
   ctx.db.match_state.room.update({ ...row, snapshot: JSON.stringify(state), revision: row.revision + 1 });
+  if (!roomHasConnection(ctx, member.room)) markRoomIdle(ctx, member.room);
 });
 export const restartMatch = db.reducer(ctx => {
   const member = ctx.db.membership.identity.find(ctx.sender);
@@ -369,10 +433,10 @@ export const controlCommand = db.reducer({ payload: t.string() }, (ctx, args) =>
 export const tick = db.reducer({ onSchedule: tick_timer }, { timer: tick_timer.rowType }, (ctx) => {
   if (!ctx.sender.equals(ctx.identity)) throw new SenderError('Only server scheduler can advance time.');
   seedGameCount(ctx);
-  const online = new Set([...ctx.db.connection.iter()].map(c => c.identity.toHexString()));
-  const activeRooms = new Set([...ctx.db.membership.iter()].filter(m => online.has(m.identity.toHexString())).map(m => m.room));
+  const now = ctx.timestamp.microsSinceUnixEpoch;
+  const activeRooms = connectedRooms(ctx);
   for(const queue of ctx.db.quick_queue.iter()) {
-    if(queue.humanOnly||queue.deadlineMicros>ctx.timestamp.microsSinceUnixEpoch||!activeRooms.has(queue.room))continue;
+    if(queue.humanOnly||queue.deadlineMicros>now||!activeRooms.has(queue.room))continue;
     const lobby=ctx.db.room_lobby.room.find(queue.room);
     if(lobby&&!lobby.started) {
       ctx.db.room_lobby.room.update({...lobby,started:true});
@@ -380,20 +444,21 @@ export const tick = db.reducer({ onSchedule: tick_timer }, { timer: tick_timer.r
     }
     ctx.db.quick_queue.room.delete(queue.room);
   }
-  for (const row of ctx.db.match_state.iter()) {
-    // Disposable automated-test rooms must not exhaust the public prototype.
-    // Never remove connected rooms or ordinary player-generated room codes.
+  for (const row of [...ctx.db.match_state.iter()]) {
+    // Timestamp-named QA rooms still expire two minutes after creation.
     const testCode=row.room.match(/^(QA|MO|MEM|HUD|TUN)([A-Z0-9]{8,14})$/);
     const testCreated=testCode?parseInt(testCode[2],36):/^INTEGRATION-[0-9]{13}$/.test(row.room)?Number(row.room.slice(12)):NaN;
-    if(!activeRooms.has(row.room)&&Number.isFinite(testCreated)&&Number(ctx.timestamp.microsSinceUnixEpoch/1000n)-testCreated>120_000){
-      for(const member of ctx.db.membership.iter())if(member.room===row.room){
-        const prefix=member.identity.toHexString()+':';
-        for(const clock of ctx.db.control_clock.iter())if(clock.key.startsWith(prefix))ctx.db.control_clock.key.delete(clock.key);
-        ctx.db.membership.identity.delete(member.identity);
-      }
-      ctx.db.quick_queue.room.delete(row.room);ctx.db.room_lobby.room.delete(row.room);ctx.db.room_owner.room.delete(row.room);ctx.db.match_state.room.delete(row.room);continue;
+    if(!activeRooms.has(row.room)&&Number.isFinite(testCreated)&&Number(now/1000n)-testCreated>120_000){
+      purgeRoom(ctx, row.room);
+      continue;
     }
-    if (!activeRooms.has(row.room)||ctx.db.room_lobby.room.find(row.room)?.started===false) continue;
+    if (!activeRooms.has(row.room)) {
+      if (!ctx.db.room_idle.room.find(row.room)) markRoomIdle(ctx, row.room);
+      else if (isIdleExpired(ctx, row, now)) purgeRoom(ctx, row.room);
+      continue;
+    }
+    clearRoomIdle(ctx, row.room);
+    if (ctx.db.room_lobby.room.find(row.room)?.started===false) continue;
     const state: GameState = JSON.parse(row.snapshot);
     if (state.phase === 'finished') continue;
     stepGame(state, 0.1);

@@ -3,8 +3,8 @@ set -euo pipefail
 spacetime_dir="$(cd "$(dirname "$0")" && pwd)"
 project_dir="$(cd "$spacetime_dir/../.." && pwd)"
 cli="${SPACETIME_CLI:-spacetime}"
-server="${SPACETIME_SERVER:-home}"
-database="${SPACETIME_DATABASE:-little-realm-teams-v2}"
+server="${SPACETIME_SERVER:-https://spacetime.tinkerers.space}"
+database="${SPACETIME_DATABASE:-tiny-knights-teams-v3}"
 case "${1:-publish}" in
   dev)
     cd "$project_dir"

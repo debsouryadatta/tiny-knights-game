@@ -10,7 +10,7 @@ Quick Play has separate queues for each size. Full online rosters start automati
 
 ## Test this worktree locally
 
-Production uses the separate `little-realm-teams-v2` database. Use an isolated local server and frontend together:
+Production uses the separate `tiny-knights-teams-v3` database. Use an isolated local server and frontend together:
 
 ```sh
 npm ci
@@ -33,9 +33,9 @@ PLAYWRIGHT_BASE_URL=http://localhost:4184 npx playwright test tests/three-lanes.
 
 Heroes earn kill XP up to level 10, gaining health and basic-attack damage. Allied core and spawn fountains restore health without using Regen. Towers take 2.5 seconds to build, reserving their cost; movement or another action cancels construction and refunds it. The main attack button and Space become Gather near a resource unless an enemy is in attack range. C remains a dedicated Gather command.
 
-Play at [little-realm-duel.vercel.app](https://little-realm-duel.vercel.app). The Canvas/Vite frontend runs on Vercel and connects directly to the self-hosted `little-realm-teams-v2` database at `https://spacetime.tinkerers.space`. Caddy terminates TLS and forwards the SDK's secure WebSocket connection to SpacetimeDB. See [cloud deployment](design/cloud-deployment.md) for deployment commands and verification notes.
+Play at [little-realm-duel.vercel.app](https://little-realm-duel.vercel.app). The Canvas/Vite frontend runs on Vercel and connects directly to the self-hosted `tiny-knights-teams-v3` database at `https://spacetime.tinkerers.space`. Caddy terminates TLS and forwards the SDK's secure WebSocket connection to SpacetimeDB. See [cloud deployment](design/cloud-deployment.md) for deployment commands and verification notes.
 
-Run `npm install` then `npm run dev -- --port 4177`. Open http://localhost:4177. Local development and Vercel both connect directly to `https://spacetime.tinkerers.space`, database `little-realm-teams-v2`. `bash backend/spacetime/run.sh publish` publishes the module to the `home` server alias; `bash backend/spacetime/run.sh integration` checks real SDK multiplayer behavior.
+Run `npm install` then `npm run dev -- --port 4177`. Open http://localhost:4177. Local development and Vercel both connect directly to `https://spacetime.tinkerers.space`, database `tiny-knights-teams-v3`. `bash backend/spacetime/run.sh publish` publishes the module to that host; `bash backend/spacetime/run.sh integration` checks real SDK multiplayer behavior.
 
 Current controls: WASD/arrows or joystick for continuous movement, hold Space/Attack to attack, Q/E/F for three skills, R recall, T regen, C gather, B tower placement, M overview, G grid, Escape cancel. Tap an enemy to target it. Drag a skill to aim and release to cast; drag toward Cancel to abort. Recall takes three seconds and movement or damage interrupts it. Landscape is recommended; fullscreen support varies by browser/OS.
 
@@ -60,7 +60,7 @@ Then run this from the repository root:
 npm run game
 ```
 
-This builds the nested server module, regenerates `backend/spacetime/bindings`, publishes to `little-realm-teams-v2` without deleting data, starts Vite on port 4177, and watches the module. Do not start a second Vite process on the same port. Root `spacetime.json` defines these targets. Personal `spacetime*.local.json` overrides are ignored by Git.
+This builds the nested server module, regenerates `backend/spacetime/bindings`, publishes to `tiny-knights-teams-v3` without deleting data, starts Vite on port 4177, and watches the module. Do not start a second Vite process on the same port. Root `spacetime.json` defines these targets. Personal `spacetime*.local.json` overrides are ignored by Git.
 
 The CLI identity must have update permission on the existing self-hosted database. Do not run `spacetime init` or use a starter template inside this repository. The game module already lives at `backend/spacetime/module/spacetimedb`.
 

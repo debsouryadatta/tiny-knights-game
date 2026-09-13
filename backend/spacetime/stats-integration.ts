@@ -29,7 +29,7 @@ try {
   const observer = await connect();
   const count = () => observer.conn.db.platformStats.id.find(0)?.gamesPlayed ?? 0n;
   let expected = count();
-  assert.ok(expected>=100n,'database contains the one-time 100-game baseline');
+  assert.ok(expected>=200n,'database contains the one-time 200-game baseline');
   const unchanged = async () => { await delay(200); assert.equal(count(), expected); };
   const incremented = async () => { expected++; await waitFor(() => count() === expected, 'exactly one new game'); };
   const host = await connect();
